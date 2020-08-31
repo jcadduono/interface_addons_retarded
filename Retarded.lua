@@ -135,6 +135,8 @@ local Player = {
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
+	aw_remains = 0,
+	consecration_remains = 0,
 }
 
 -- current target information
@@ -459,7 +461,7 @@ function Ability:Usable()
 	if self:HolyPowerCost() > Player.holy_power then
 		return false
 	end
-	if self.requires_charge and self:charges() == 0 then
+	if self.requires_charge and self:Charges() == 0 then
 		return false
 	end
 	return self:Ready()
@@ -570,7 +572,7 @@ function Ability:Stack()
 end
 
 function Ability:ManaCost()
-	return self.mana_cost
+	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana_max) or 0
 end
 
 function Ability:HolyPowerCost()
@@ -757,11 +759,61 @@ Rebuke.cooldown_duration = 15
 ------ Procs
 
 ---- Protection
-
+local AvengersShield = Ability:Add(31935, false, true)
+AvengersShield.buff_duration = 3
+AvengersShield.cooldown_duration = 15
+AvengersShield.hasted_cooldown = true
+AvengersShield:SetVelocity(35)
+AvengersShield:AutoAoe()
+local AvengingWrath = Ability:Add(31884, true, true)
+AvengingWrath.buff_duration = 20
+AvengingWrath.cooldown_duration = 120
+local Consecration = Ability:Add(26573, true, true, 188370)
+Consecration.buff_duration = 12
+Consecration.cooldown_duration = 4.5
+Consecration.hasted_cooldown = true
+Consecration.dot = Ability:Add(204242, false, true, 81297)
+Consecration.dot.buff_duration = 12
+Consecration.dot.tick_interval = 1
+Consecration.dot.hasted_ticks = true
+Consecration.dot:AutoAoe()
+local HammerOfTheRighteous = Ability:Add(53595, false, true)
+HammerOfTheRighteous.cooldown_duration = 4.5
+HammerOfTheRighteous.requires_charge = true
+HammerOfTheRighteous:AutoAoe()
+local Judgment = Ability:Add(275779, false, true)
+Judgment.cooldown_duration = 12
+Judgment.mana_cost = 3
+Judgment.max_range = 30
+Judgment.hasted_cooldown = true
+Judgment.requires_charge = true
+Judgment:SetVelocity(35)
+local Seraphim = Ability:Add(152262, true, true)
+Seraphim.buff_duration = 8
+Seraphim.cooldown_duration = 45
+local ShieldOfTheRighteous = Ability:Add(53600, false, true)
+ShieldOfTheRighteous.cooldown_duration = 18
+ShieldOfTheRighteous.hasted_cooldown = true
+ShieldOfTheRighteous.requires_charge = true
+ShieldOfTheRighteous.triggers_gcd = false
+ShieldOfTheRighteous:AutoAoe()
+ShieldOfTheRighteous.buff = Ability:Add(132403, true, true)
+ShieldOfTheRighteous.buff.buff_duration = 4.5
+local LightOfTheProtector = Ability:Add(184092, true, true)
+LightOfTheProtector.cooldown_duration = 17
+LightOfTheProtector.hasted_cooldown = true
 ------ Talents
-
+local BastionOfLight = Ability:Add(204035, true, true)
+BastionOfLight.cooldown_duration = 120
+local BlessedHammer = Ability:Add(204019, false, true)
+BlessedHammer.buff_duration = 5
+BlessedHammer.cooldown_duration = 4.5
+BlessedHammer.requires_charge = true
+BlessedHammer:AutoAoe()
+local CrusadersJudgment = Ability:Add(204023, true, true)
 ------ Procs
-
+local AvengersValor = Ability:Add(197561, true, true)
+AvengersValor.buff_duration = 15
 ---- Retribution
 
 ------ Talents
@@ -868,7 +920,10 @@ local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 
 -- Racials
-
+local LightsJudgment = Ability:Add(255647, false, true)
+LightsJudgment.buff_duration = 3
+LightsJudgment.cooldown_duration = 150
+LightsJudgment:AutoAoe()
 -- Trinket Effects
 
 -- End Abilities
@@ -1099,6 +1154,10 @@ function Player:UpdateAbilities()
 			end
 		end
 	end
+	
+	AvengersValor.known = AvengersShield.known
+	Consecration.dot.known = Consecration.known
+	ShieldOfTheRighteous.buff.known = ShieldOfTheRighteous.known
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1208,11 +1267,18 @@ function ConcentratedFlame.dot:Remains()
 	return Ability.Remains(self)
 end
 
-function HammerOfJustice:usable()
+function HammerOfJustice:Usable()
 	if not Target.stunnable then
 		return false
 	end
-	return Ability.usable(self)
+	return Ability.Usable(self)
+end
+
+function Consecration:Remains()
+	if Ability.Remains(self) <= 0 then
+		return 0
+	end
+	return min(self.buff_duration, max(0, self.buff_duration - (Player.time - self.last_used) - Player.execute_remains))
 end
 
 -- End Ability Modifications
@@ -1246,6 +1312,16 @@ end
 
 APL[SPEC.PROTECTION].main = function(self)
 	if Player:TimeInCombat() == 0 then
+--[[
+actions.precombat=flask
+actions.precombat+=/food
+actions.precombat+=/augmentation
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
+actions.precombat+=/potion
+actions.precombat+=/consecration
+actions.precombat+=/lights_judgment
+]]
 		if Opt.pot and not Player:InArenaOrBattleground() then
 			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
 				UseCooldown(GreaterFlaskOfTheUndertow)
@@ -1254,6 +1330,119 @@ APL[SPEC.PROTECTION].main = function(self)
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
+		if AvengersShield:Usable() then
+			return AvengersShield
+		end
+	end
+--[[
+actions=auto_attack
+actions+=/call_action_list,name=cooldowns
+actions+=/worldvein_resonance,if=buff.lifeblood.stack<3
+# Dumping SotR charges
+actions+=/shield_of_the_righteous,if=(buff.avengers_valor.up&cooldown.shield_of_the_righteous.charges_fractional>=2.5)&(cooldown.seraphim.remains>gcd|!talent.seraphim.enabled)
+actions+=/shield_of_the_righteous,if=(buff.avenging_wrath.up&!talent.seraphim.enabled)|buff.seraphim.up&buff.avengers_valor.up
+actions+=/shield_of_the_righteous,if=(buff.avenging_wrath.up&buff.avenging_wrath.remains<4&!talent.seraphim.enabled)|(buff.seraphim.remains<4&buff.seraphim.up)
+actions+=/lights_judgment,if=buff.seraphim.up&buff.seraphim.remains<3
+actions+=/consecration,if=!consecration.up
+actions+=/judgment,if=(cooldown.judgment.remains<gcd&cooldown.judgment.charges_fractional>1&cooldown_react)|!talent.crusaders_judgment.enabled
+actions+=/avengers_shield,if=cooldown_react
+actions+=/judgment,if=cooldown_react|!talent.crusaders_judgment.enabled
+actions+=/concentrated_flame,if=(!talent.seraphim.enabled|buff.seraphim.up)&!dot.concentrated_flame_burn.remains>0|essence.the_crucible_of_flame.rank<3
+actions+=/lights_judgment,if=!talent.seraphim.enabled|buff.seraphim.up
+actions+=/anima_of_death
+actions+=/blessed_hammer,strikes=3
+actions+=/hammer_of_the_righteous
+actions+=/consecration
+actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldvein_resonance.major|essence.anima_of_life_and_death.major|essence.memory_of_lucid_dreams.major)
+]]
+	self:cooldowns()
+	if WorldveinResonance:Usable() and Lifeblood:stack() < 3 then
+		UseCooldown(WorldveinResonance)
+	end
+	if ShieldOfTheRighteous:Usable() and (
+		(AvengersValor:Up() and ShieldOfTheRighteous:ChargesFractional() >= 2.5 and (not Seraphim.known or not Seraphim:Ready(Player.gcd))) or
+		((not Seraphim.known and between(Player.aw_remains, 0.1, 4)) or (Seraphim.known and between(Seraphim:Remains(), 0.1, 4))) or
+		((not Seraphim.known or Seraphim:Up()) and (not AvengingWrath.known or not AvengingWrath:Ready(4) or Player.aw_remains > 0) and (((ShieldOfTheRighteous.buff:Down() or AvengersShield:Ready()) and AvengersValor:Up()) or (ShieldOfTheRighteous:ChargesFractional() >= 2.5 and not AvengersShield:Ready() or AvengersValor:Up())))
+	) then
+		UseCooldown(ShieldOfTheRighteous, true)
+	end
+	if Seraphim.known and LightsJudgment:Usable() and Seraphim:Up() and Seraphim:Remains() < 3 then
+		UseCooldown(LightsJudgment)
+	end
+	if Consecration:Usable() and Player.consecration_remains < 0.5 then
+		return Consecration
+	end
+	if AvengersShield:Usable() and (Player.enemies > 1 or ShieldOfTheRighteous:ChargesFractional() >= 2.3 or (ShieldOfTheRighteous:Ready() and ShieldOfTheRighteous.buff:Down())) then
+		return AvengersShield
+	end
+	if Judgment:Usable() and (not CrusadersJudgment.known or Judgment:ChargesFractional() > 1) then
+		return Judgment
+	end
+	if AvengersShield:Usable() then
+		return AvengersShield
+	end
+	if Judgment:Usable() then
+		return Judgment
+	end
+	if ConcentratedFlame:Usable() and (not Seraphim.known or Seraphim:Up()) and ConcentratedFlame.dot:Down() then
+		return ConcentratedFlame
+	end
+	if LightsJudgment:Usable() and (not Seraphim.known or Seraphim:Up()) then
+		UseCooldown(LightsJudgment)
+	end
+	if AnimaOfDeath:Usable() then
+		UseCooldown(AnimaOfDeath)
+	end
+	if BlessedHammer:Usable() then
+		return BlessedHammer
+	end
+	if HammerOfTheRighteous:Usable() then
+		return HammerOfTheRighteous
+	end
+	if Consecration:Usable() then
+		return Consecration
+	end
+	if VigilantProtector:Usable() then
+		UseCooldown(VigilantProtector)
+	end
+end
+
+APL[SPEC.PROTECTION].cooldowns = function(self)
+--[[
+actions.cooldowns=fireblood,if=buff.avenging_wrath.up
+actions.cooldowns+=/use_item,name=azsharas_font_of_power,if=cooldown.seraphim.remains<=10|!talent.seraphim.enabled
+actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=(debuff.razor_coral_debuff.stack>7&buff.avenging_wrath.up)|debuff.razor_coral_debuff.stack=0
+actions.cooldowns+=/seraphim,if=cooldown.shield_of_the_righteous.charges_fractional>=2
+actions.cooldowns+=/avenging_wrath,if=buff.seraphim.up|cooldown.seraphim.remains<2|!talent.seraphim.enabled
+actions.cooldowns+=/memory_of_lucid_dreams,if=!talent.seraphim.enabled|cooldown.seraphim.remains<=gcd|buff.seraphim.up
+actions.cooldowns+=/bastion_of_light,if=cooldown.shield_of_the_righteous.charges_fractional<=0.5
+actions.cooldowns+=/potion,if=buff.avenging_wrath.up
+actions.cooldowns+=/use_items,if=buff.seraphim.up|!talent.seraphim.enabled
+actions.cooldowns+=/use_item,name=grongs_primal_rage,if=cooldown.judgment.full_recharge_time>4&cooldown.avengers_shield.remains>4&(buff.seraphim.up|cooldown.seraphim.remains+4+gcd>expected_combat_length-time)&consecration.up
+actions.cooldowns+=/use_item,name=pocketsized_computation_device,if=cooldown.judgment.full_recharge_time>4*spell_haste&cooldown.avengers_shield.remains>4*spell_haste&(!equipped.grongs_primal_rage|!trinket.grongs_primal_rage.cooldown.up)&consecration.up
+actions.cooldowns+=/use_item,name=merekthas_fang,if=!buff.avenging_wrath.up&(buff.seraphim.up|!talent.seraphim.enabled)
+actions.cooldowns+=/use_item,name=razdunks_big_red_button
+]]
+	if LightOfTheProtector:Usable() and Player:HealthPct() < 40 then
+		UseCooldown(LightOfTheProtector)
+	end
+	if Seraphim:Usable() and ShieldOfTheRighteous:ChargesFractional() >= 2 then
+		UseCooldown(Seraphim)
+	end
+	if AvengingWrath:Usable() and (not Seraphim.known or Seraphim:Up() or Seraphim:Ready(2)) then
+		UseCooldown(AvengingWrath)
+	end
+	if MemoryOfLucidDreams:Usable() and (not Seraphim.known or Seraphim:Ready(Player.gcd) or Seraphim:Up()) then
+		UseCooldown(MemoryOfLucidDreams)
+	end
+	if BastionOfLight:Usable() and ShieldOfTheRighteous:ChargesFractional() < 0.5 then
+		UseCooldown(BastionOfLight)
+	end
+	if Opt.pot and Target.boss and not Player:InArenaOrBattleground() and PotionOfUnbridledFury:Usable() then
+		UseCooldown(PotionOfUnbridledFury)
+	end
+	if LightOfTheProtector:Usable() and Player:HealthPct() < 80 then
+		UseCooldown(LightOfTheProtector)
 	end
 end
 
@@ -1449,15 +1638,15 @@ UI.anchor_points = {
 	kui = { -- Kui Nameplates
 		[SPEC.HOLY] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
 		[SPEC.PROTECTION] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
 		[SPEC.RETRIBUTION] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 6 }
+			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
 		},
 	},
 }
@@ -1516,15 +1705,23 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, text_center
+	local dim, text_tl, text_bl
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
 	end
 
+	if AvengingWrath.known and Player.aw_remains > 0 then
+		text_tl = format('%.1fs', Player.aw_remains)
+	end
+	if Consecration.known and Player.consecration_remains > 0 then
+		text_bl = format('%.1fs', Player.consecration_remains)
+	end
+
 	retardedPanel.dimmer:SetShown(dim)
-	retardedPanel.text.center:SetText(text_center)
+	retardedPanel.text.tl:SetText(text_tl)
+	retardedPanel.text.bl:SetText(text_bl)
 	--retardedPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
@@ -1554,6 +1751,13 @@ function UI:UpdateCombat()
 	Player.mana = min(max(Player.mana, 0), Player.mana_max)
 	Player.moving = GetUnitSpeed('player') ~= 0
 	Player.holy_power = UnitPower('player', 9)
+
+	if AvengingWrath.known then
+		Player.aw_remains = AvengingWrath:Remains()
+	end
+	if Consecration.known then
+		Player.consecration_remains = Consecration:Remains()
+	end
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
@@ -1659,7 +1863,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName, spellId))
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -1681,21 +1885,22 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	UI:UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
-		if srcGUID == Player.guid or ability.player_triggered then
-			Player.last_ability = ability
-			if ability.triggers_gcd then
-				Player.previous_gcd[10] = nil
-				table.insert(Player.previous_gcd, 1, ability)
-			end
-			if ability.travel_start then
-				ability.travel_start[dstGUID] = Player.time
-			end
-			if Opt.previous and retardedPanel:IsVisible() then
-				retardedPreviousPanel.ability = ability
-				retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
-				retardedPreviousPanel.icon:SetTexture(ability.icon)
-				retardedPreviousPanel:Show()
-			end
+		Player.last_ability = ability
+		if ability.triggers_gcd then
+			Player.previous_gcd[10] = nil
+			table.insert(Player.previous_gcd, 1, ability)
+		end
+		if ability.travel_start then
+			ability.travel_start[dstGUID] = Player.time
+		end
+		if Opt.previous and retardedPanel:IsVisible() then
+			retardedPreviousPanel.ability = ability
+			retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+			retardedPreviousPanel.icon:SetTexture(ability.icon)
+			retardedPreviousPanel:Show()
+		end
+		if ability == Consecration then
+			Consecration.last_used = Player.time
 		end
 		return
 	end
