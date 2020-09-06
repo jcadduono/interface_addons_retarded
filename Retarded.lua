@@ -136,6 +136,7 @@ local Player = {
 		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
 	aw_remains = 0,
+	crusade_remains = 0,
 	consecration_remains = 0,
 }
 
@@ -422,12 +423,13 @@ function Ability:Add(spellId, buff, player, spellId2)
 		hasted_ticks = false,
 		known = false,
 		mana_cost = 0,
-		hp_cost = 0,
+		power_cost = 0,
 		cooldown_duration = 0,
 		buff_duration = 0,
 		tick_interval = 0,
 		max_range = 40,
 		velocity = 0,
+		last_used = 0,
 		auraTarget = buff and 'player' or 'target',
 		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
@@ -576,7 +578,7 @@ function Ability:ManaCost()
 end
 
 function Ability:HolyPowerCost()
-	return self.hp_cost
+	return self.power_cost
 end
 
 function Ability:Charges()
@@ -742,12 +744,22 @@ end
 
 -- Paladin Abilities
 ---- Multiple Specializations
+local AvengingWrath = Ability:Add(31884, true, true)
+AvengingWrath.buff_duration = 20
+AvengingWrath.cooldown_duration = 120
+AvengingWrath.autocrit = Ability:Add(294027, true, true)
+AvengingWrath.autocrit.buff_duration = 20
 local HammerOfJustice = Ability:Add(853, false, true)
 HammerOfJustice.buff_duration = 6
 HammerOfJustice.cooldown_duration = 60
 local Rebuke = Ability:Add(96231, false, true)
 Rebuke.buff_duration = 4
 Rebuke.cooldown_duration = 15
+local WordOfGlory = Ability:Add(210191, true, true)
+WordOfGlory.cooldown_duration = 60
+WordOfGlory.power_cost = 3
+WordOfGlory.requires_charge = true
+
 ------ Talents
 
 ------ Procs
@@ -765,9 +777,6 @@ AvengersShield.cooldown_duration = 15
 AvengersShield.hasted_cooldown = true
 AvengersShield:SetVelocity(35)
 AvengersShield:AutoAoe()
-local AvengingWrath = Ability:Add(31884, true, true)
-AvengingWrath.buff_duration = 20
-AvengingWrath.cooldown_duration = 120
 local Consecration = Ability:Add(26573, true, true, 188370)
 Consecration.buff_duration = 12
 Consecration.cooldown_duration = 4.5
@@ -781,13 +790,13 @@ local HammerOfTheRighteous = Ability:Add(53595, false, true)
 HammerOfTheRighteous.cooldown_duration = 4.5
 HammerOfTheRighteous.requires_charge = true
 HammerOfTheRighteous:AutoAoe()
-local Judgment = Ability:Add(275779, false, true)
-Judgment.cooldown_duration = 12
-Judgment.mana_cost = 3
-Judgment.max_range = 30
-Judgment.hasted_cooldown = true
-Judgment.requires_charge = true
-Judgment:SetVelocity(35)
+local JudgmentProt = Ability:Add(275779, false, true)
+JudgmentProt.cooldown_duration = 12
+JudgmentProt.mana_cost = 3
+JudgmentProt.max_range = 30
+JudgmentProt.hasted_cooldown = true
+JudgmentProt.requires_charge = true
+JudgmentProt:SetVelocity(35)
 local Seraphim = Ability:Add(152262, true, true)
 Seraphim.buff_duration = 8
 Seraphim.cooldown_duration = 45
@@ -815,13 +824,67 @@ local CrusadersJudgment = Ability:Add(204023, true, true)
 local AvengersValor = Ability:Add(197561, true, true)
 AvengersValor.buff_duration = 15
 ---- Retribution
-
+local BladeOfJustice = Ability:Add(184575, false, true)
+BladeOfJustice.cooldown_duration = 10.5
+BladeOfJustice.hasted_cooldown = true
+local CrusaderStrike = Ability:Add(35395, false, true)
+CrusaderStrike.cooldown_duration = 6
+CrusaderStrike.hasted_cooldown = true
+CrusaderStrike.requires_charge = true
+local DivineStorm = Ability:Add(53385, false, true)
+DivineStorm.power_cost = 3
+DivineStorm:AutoAoe(true)
+local Judgment = Ability:Add(20271, false, true, 197277)
+Judgment.buff_duration = 15
+Judgment.cooldown_duration = 12
+Judgment.max_range = 30
+Judgment.hasted_cooldown = true
+Judgment:SetVelocity(35)
+local ShieldOfVengeance = Ability:Add(184662, true, true)
+ShieldOfVengeance.buff_duration = 15
+ShieldOfVengeance.cooldown_duration = 120
+local TemplarsVerdict = Ability:Add(85256, false, true, 224266)
+TemplarsVerdict.power_cost = 3
 ------ Talents
-
+local ConsecrationRet = Ability:Add(205228, false, true, 81297)
+ConsecrationRet.buff_duration = 6
+ConsecrationRet.cooldown_duration = 20
+ConsecrationRet.tick_interval = 1
+ConsecrationRet.hasted_ticks = true
+ConsecrationRet:AutoAoe()
+local Crusade = Ability:Add(231895, true, true)
+Crusade.buff_duration = 30
+Crusade.cooldown_duration = 120
+Crusade.requires_charge = true
+local DivinePurpose = Ability:Add(223817, true, true, 223819)
+DivinePurpose.buff_duration = 12
+local ExecutionSentence = Ability:Add(267798, false, true, 267799)
+ExecutionSentence.buff_duration = 12
+ExecutionSentence.cooldown_duration = 30
+ExecutionSentence.power_cost = 3
+local FiresOfJustice = Ability:Add(203316, true, true, 209785)
+FiresOfJustice.buff_duration = 15
+local Inquisition = Ability:Add(84963, true, true)
+Inquisition.buff_duration = 15
+Inquisition.power_cost = 1
+local HammerOfWrath = Ability:Add(24275, false, true)
+HammerOfWrath.cooldown_duration = 7.5
+HammerOfWrath.hasted_cooldown = true
+HammerOfWrath.max_range = 30
+HammerOfWrath:SetVelocity(40)
+local WakeOfAshes = Ability:Add(255937, false, true)
+WakeOfAshes.buff_duration = 5
+WakeOfAshes.cooldown_duration = 45
+WakeOfAshes:AutoAoe()
+local RighteousVerdict = Ability:Add(267610, true, true, 267611)
+RighteousVerdict.buff_duration = 6
 ------ Procs
 
 -- Azerite Traits
-
+local EmpyreanPower = Ability:Add(286390, true, true, 286393)
+EmpyreanPower.buff_duration = 15
+local LightsDecree = Ability:Add(286229, false, true, 286232)
+LightsDecree:AutoAoe()
 -- Heart of Azeroth
 ---- Major Essences
 local AnimaOfDeath = Ability:Add({294926, 300002, 300003}, false, true)
@@ -834,6 +897,9 @@ BloodOfTheEnemy.cooldown_duration = 120
 BloodOfTheEnemy.essence_id = 23
 BloodOfTheEnemy.essence_major = true
 BloodOfTheEnemy:AutoAoe(true)
+BloodOfTheEnemy.buff = Ability:Add(297126, true, true) -- Seething Rage
+BloodOfTheEnemy.buff.buff_duration = 5
+BloodOfTheEnemy.buff.essence_id = 23
 local ConcentratedFlame = Ability:Add({295373, 299349, 299353}, true, true, 295378)
 ConcentratedFlame.buff_duration = 180
 ConcentratedFlame.cooldown_duration = 30
@@ -1154,8 +1220,12 @@ function Player:UpdateAbilities()
 			end
 		end
 	end
-	
+
+	if Crusade.known then
+		AvengingWrath.known = false
+	end
 	AvengersValor.known = AvengersShield.known
+	AvengingWrath.autocrit.known = AvengingWrath.known
 	Consecration.dot.known = Consecration.known
 	ShieldOfTheRighteous.buff.known = ShieldOfTheRighteous.known
 
@@ -1260,6 +1330,17 @@ end
 
 -- Start Ability Modifications
 
+function Ability:HolyPowerCost()
+	if DivinePurpose.known and DivinePurpose:Up() then
+		return 0
+	end
+	local cost = self.power_cost
+	if cost > 0 and FiresOfJustice.known and FiresOfJustice:Up() then
+		cost = cost - 1
+	end
+	return cost
+end
+
 function ConcentratedFlame.dot:Remains()
 	if ConcentratedFlame:Traveling() then
 		return self:Duration()
@@ -1279,6 +1360,25 @@ function Consecration:Remains()
 		return 0
 	end
 	return min(self.buff_duration, max(0, self.buff_duration - (Player.time - self.last_used) - Player.execute_remains))
+end
+ConsecrationRet.Remains = Consecration.Remains
+
+function Inquisition:HolyPowerCost()
+	return min(3, max(1, Player.holy_power))
+end
+
+function HammerOfWrath:Usable()
+	if Target.healthPercentage >= 20 and AvengingWrath:Down() and Crusade:Down() then
+		return false
+	end
+	return Ability.Usable(self)
+end
+
+function DivineStorm:HolyPowerCost()
+	if EmpyreanPower.known and EmpyreanPower:Up() then
+		return 0
+	end
+	return Ability.HolyPowerCost(self)
 end
 
 -- End Ability Modifications
@@ -1375,14 +1475,14 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 	if AvengersShield:Usable() and (Player.enemies > 1 or ShieldOfTheRighteous:ChargesFractional() >= 2.3 or (ShieldOfTheRighteous:Ready() and ShieldOfTheRighteous.buff:Down())) then
 		return AvengersShield
 	end
-	if Judgment:Usable() and (not CrusadersJudgment.known or Judgment:ChargesFractional() > 1) then
-		return Judgment
+	if JudgmentProt:Usable() and (not CrusadersJudgment.known or JudgmentProt:ChargesFractional() > 1) then
+		return JudgmentProt
 	end
 	if AvengersShield:Usable() then
 		return AvengersShield
 	end
-	if Judgment:Usable() then
-		return Judgment
+	if JudgmentProt:Usable() then
+		return JudgmentProt
 	end
 	if ConcentratedFlame:Usable() and (not Seraphim.known or Seraphim:Up()) and ConcentratedFlame.dot:Down() then
 		return ConcentratedFlame
@@ -1448,6 +1548,16 @@ end
 
 APL[SPEC.RETRIBUTION].main = function(self)
 	if Player:TimeInCombat() == 0 then
+--[[
+actions.precombat=flask
+actions.precombat+=/food
+actions.precombat+=/augmentation
+# Snapshot raid buffed stats before combat begins and pre-potting is done.
+actions.precombat+=/snapshot_stats
+actions.precombat+=/potion
+actions.precombat+=/use_item,name=azsharas_font_of_power
+actions.precombat+=/arcane_torrent,if=!talent.wake_of_ashes.enabled
+]]
 		if Opt.pot and not Player:InArenaOrBattleground() then
 			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
 				UseCooldown(FlaskOfTheUndertow)
@@ -1456,6 +1566,144 @@ APL[SPEC.RETRIBUTION].main = function(self)
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
+	end
+--[[
+actions=auto_attack
+actions+=/rebuke
+actions+=/call_action_list,name=cooldowns
+actions+=/call_action_list,name=generators
+]]
+	self:cooldowns()
+	return self:generators()
+end
+
+APL[SPEC.RETRIBUTION].cooldowns = function(self)
+--[[
+actions.cooldowns=potion,if=(cooldown.guardian_of_azeroth.remains>90|!essence.condensed_lifeforce.major)&(buff.bloodlust.react|buff.avenging_wrath.up&buff.avenging_wrath.remains>18|buff.crusade.up&buff.crusade.remains<25)
+actions.cooldowns+=/lights_judgment,if=spell_targets.lights_judgment>=2|(!raid_event.adds.exists|raid_event.adds.in>75)
+actions.cooldowns+=/fireblood,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10
+actions.cooldowns+=/shield_of_vengeance,if=buff.seething_rage.down&buff.memory_of_lucid_dreams.down
+actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.down|(buff.avenging_wrath.remains>=20|buff.crusade.stack=10&buff.crusade.remains>15)&(cooldown.guardian_of_azeroth.remains>90|target.time_to_die<30|!essence.condensed_lifeforce.major)
+actions.cooldowns+=/the_unbound_force,if=time<=2|buff.reckless_force.up
+actions.cooldowns+=/blood_of_the_enemy,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10
+actions.cooldowns+=/guardian_of_azeroth,if=!talent.crusade.enabled&(cooldown.avenging_wrath.remains<5&holy_power>=3&(buff.inquisition.up|!talent.inquisition.enabled)|cooldown.avenging_wrath.remains>=45)|(talent.crusade.enabled&cooldown.crusade.remains<gcd&holy_power>=4|holy_power>=3&time<10&talent.wake_of_ashes.enabled|cooldown.crusade.remains>=45)
+actions.cooldowns+=/worldvein_resonance,if=cooldown.avenging_wrath.remains<gcd&holy_power>=3|talent.crusade.enabled&cooldown.crusade.remains<gcd&holy_power>=4|cooldown.avenging_wrath.remains>=45|cooldown.crusade.remains>=45
+actions.cooldowns+=/focused_azerite_beam,if=(!raid_event.adds.exists|raid_event.adds.in>30|spell_targets.divine_storm>=2)&!(buff.avenging_wrath.up|buff.crusade.up)&(cooldown.blade_of_justice.remains>gcd*3&cooldown.judgment.remains>gcd*3)
+actions.cooldowns+=/memory_of_lucid_dreams,if=(buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10)&holy_power<=3
+actions.cooldowns+=/purifying_blast,if=(!raid_event.adds.exists|raid_event.adds.in>30|spell_targets.divine_storm>=2)
+actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=!(buff.avenging_wrath.up|buff.crusade.up)&(cooldown.blade_of_justice.remains>gcd*3&cooldown.judgment.remains>gcd*3)
+actions.cooldowns+=/avenging_wrath,if=(!talent.inquisition.enabled|buff.inquisition.up)&holy_power>=3
+actions.cooldowns+=/crusade,if=holy_power>=4|holy_power>=3&time<10&talent.wake_of_ashes.enabled
+]]
+	if Opt.pot and not Player:InArenaOrBattleground() and PotionOfUnbridledFury:Usable() and (not GuardianOfAzeroth.known or not GuardianOfAzeroth:Ready(90)) and (Player:BloodlustActive() or Player.aw_remains > 18 or (Player.crusade_remains > 0 and Player.crusade_remains < 25)) then
+		UseCooldown(PotionOfUnbridledFury)
+	end
+	if LightsJudgment:Usable() and Player.enemies >= 2 then
+		UseCooldown(LightsJudgment)
+	end
+	if ShieldOfVengeance:Usable() and Player:UnderAttack() and BloodOfTheEnemy.buff:Down() and MemoryOfLucidDreams:Down() then
+		UseCooldown(ShieldOfVengeance)
+	end
+	if TheUnboundForce:Usable() and (RecklessForce:Up() or RecklessForce.counter:Stack() < 4) then
+		UseCooldown(TheUnboundForce)
+	elseif BloodOfTheEnemy:Usable() and (Player.aw_remains > 0 or Crusade.known and Crusade:Stack() >= 10) then
+		UseCooldown(BloodOfTheEnemy)
+	elseif GuardianOfAzeroth:Usable() and ((not Crusade.known and (AvengingWrath:Ready(5) and Player:HolyPower() >= 3 and (not Inquisition.known or Inquisition:Up()) or not AvengingWrath:Ready(45))) or (Crusade.known and (not Crusade:Ready(45) or (Crusade:Ready(Player.gcd) and Player:HolyPower() >= 4))) or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
+		UseCooldown(GuardianOfAzeroth)
+	elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 and ((AvengingWrath:Ready(Player.gcd) and Player:HolyPower() >= 3) or (Crusade.known and Crusade:Ready(Player.gcd) and Player:HolyPower() >= 4) or not AvengingWrath:Ready(45) or (Crusade.known and not Crusade:Ready(45))) then
+		UseCooldown(WorldveinResonance)
+	elseif FocusedAzeriteBeam:Usable() and not (Player.aw_remains > 0 or Player.crusade_remains > 0 or BladeOfJustice:Ready(Player.gcd * 3) or Judgment:Ready(Player.gcd * 3)) then
+		UseCooldown(FocusedAzeriteBeam)
+	elseif MemoryOfLucidDreams:Usable() and (Player.aw_remains > 0 or Crusade:Stack() >= 10) and Player:HolyPower() <= 3 then
+		UseCooldown(MemoryOfLucidDreams)
+	elseif PurifyingBlast:Usable() then
+		UseCooldown(PurifyingBlast)
+	end
+	if AvengingWrath:Usable() and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
+		UseCooldown(AvengingWrath)
+	end
+	if Crusade:Usable() and (Player:HolyPower() >= 4 or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
+		UseCooldown(Crusade)
+	end
+end
+
+APL[SPEC.RETRIBUTION].finishers = function(self)
+--[[
+actions.finishers=variable,name=wings_pool,value=!equipped.169314&(!talent.crusade.enabled&cooldown.avenging_wrath.remains>gcd*3|cooldown.crusade.remains>gcd*3)|equipped.169314&(!talent.crusade.enabled&cooldown.avenging_wrath.remains>gcd*6|cooldown.crusade.remains>gcd*6)
+actions.finishers+=/variable,name=ds_castable,value=spell_targets.divine_storm>=2&!talent.righteous_verdict.enabled|spell_targets.divine_storm>=3&talent.righteous_verdict.enabled|buff.empyrean_power.up&debuff.judgment.down&buff.divine_purpose.down&buff.avenging_wrath_autocrit.down
+actions.finishers+=/inquisition,if=buff.avenging_wrath.down&(buff.inquisition.down|buff.inquisition.remains<8&holy_power>=3|talent.execution_sentence.enabled&cooldown.execution_sentence.remains<10&buff.inquisition.remains<15|cooldown.avenging_wrath.remains<15&buff.inquisition.remains<20&holy_power>=3)
+actions.finishers+=/execution_sentence,if=spell_targets.divine_storm<=2&(!talent.crusade.enabled&cooldown.avenging_wrath.remains>10|talent.crusade.enabled&buff.crusade.down&cooldown.crusade.remains>10|buff.crusade.stack>=7)
+actions.finishers+=/divine_storm,if=variable.ds_castable&variable.wings_pool&((!talent.execution_sentence.enabled|(spell_targets.divine_storm>=2|cooldown.execution_sentence.remains>gcd*2))|(cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10))
+actions.finishers+=/templars_verdict,if=variable.wings_pool&(!talent.execution_sentence.enabled|cooldown.execution_sentence.remains>gcd*2|cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10)
+]]
+	Player.wings_pool = (not Crusade.known and not AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and not Crusade:Ready(Player.gcd * 3))
+	Player.ds_castable = Player.enemies >= (RighteousVerdict.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() and Judgment:Down() and DivinePurpose:Down() and AvengingWrath.autocrit:Down())
+	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
+		return Inquisition
+	end
+	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((not Crusade.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7))) then
+		return ExecutionSentence
+	end
+	if Player.ds_castable and Player.wings_pool and DivineStorm:Usable() and ((not ExecutionSentence.known or (Player.enemies >= 2 or not ExecutionSentence:Ready(Player.gcd * 2))) or ((AvengingWrath.known and between(AvengingWrath:Cooldown(), Player.gcd * 3, 10)) or (Crusade.known and between(Crusade:Cooldown(), Player.gcd * 3, 10) or (Player.crusade_remains > 0 and Crusade:Stack() < 10)))) then
+		return DivineStorm
+	end
+	if Player.wings_pool and TemplarsVerdict:Usable() and (not ExecutionSentence.known or not ExecutionSentence:Ready(Player.gcd * 2) or (AvengingWrath.known and between(AvengingWrath:Cooldown(), Player.gcd * 3, 10)) or (Crusade.known and between(Crusade:Cooldown(), Player.gcd * 3, 10) or (Player.crusade_remains > 0 and Crusade:Stack() < 10))) then
+		return TemplarsVerdict
+	end
+end
+
+APL[SPEC.RETRIBUTION].generators = function(self)
+--[[
+actions.generators=variable,name=HoW,value=(!talent.hammer_of_wrath.enabled|target.health.pct>=20&!(buff.avenging_wrath.up|buff.crusade.up))
+actions.generators+=/call_action_list,name=finishers,if=holy_power>=5|buff.memory_of_lucid_dreams.up|buff.seething_rage.up|talent.inquisition.enabled&buff.inquisition.down&holy_power>=3
+actions.generators+=/wake_of_ashes,if=(!raid_event.adds.exists|raid_event.adds.in>15|spell_targets.wake_of_ashes>=2)&(holy_power<=0|holy_power=1&cooldown.blade_of_justice.remains>gcd)&(cooldown.avenging_wrath.remains>10|talent.crusade.enabled&cooldown.crusade.remains>10)
+actions.generators+=/blade_of_justice,if=holy_power<=2|(holy_power=3&(cooldown.hammer_of_wrath.remains>gcd*2|variable.HoW))
+actions.generators+=/judgment,if=holy_power<=2|(holy_power<=4&(cooldown.blade_of_justice.remains>gcd*2|variable.HoW))
+actions.generators+=/hammer_of_wrath,if=holy_power<=4
+actions.generators+=/consecration,if=holy_power<=2|holy_power<=3&cooldown.blade_of_justice.remains>gcd*2|holy_power=4&cooldown.blade_of_justice.remains>gcd*2&cooldown.judgment.remains>gcd*2
+actions.generators+=/call_action_list,name=finishers,if=talent.hammer_of_wrath.enabled&target.health.pct<=20|buff.avenging_wrath.up|buff.crusade.up
+actions.generators+=/crusader_strike,if=cooldown.crusader_strike.charges_fractional>=1.75&(holy_power<=2|holy_power<=3&cooldown.blade_of_justice.remains>gcd*2|holy_power=4&cooldown.blade_of_justice.remains>gcd*2&cooldown.judgment.remains>gcd*2&cooldown.consecration.remains>gcd*2)
+actions.generators+=/call_action_list,name=finishers
+actions.generators+=/concentrated_flame
+actions.generators+=/reaping_flames
+actions.generators+=/crusader_strike,if=holy_power<=4
+actions.generators+=/arcane_torrent,if=holy_power<=4
+]]
+	Player.how = not HammerOfWrath.known or (Target.healthPercentage >= 20 and not (Player.aw_remains > 0 or Player.crusade_remains > 0))
+	local finisher = self:finishers()
+	if Player:HolyPower() >= 5 or MemoryOfLucidDreams:Up() or BloodOfTheEnemy.buff:Up() or (Inquisition.known and Inquisition:Down() and Player:HolyPower() >= 3) then
+		if finisher then return finisher end
+	end
+	if WakeOfAshes:Usable() and (Player:HolyPower() <= 0 or (Player:HolyPower() <= 1 and not BladeOfJustice:Ready(Player.gcd))) and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and not Crusade:Ready(10))) then
+		UseCooldown(WakeOfAshes)
+	end
+	if BladeOfJustice:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 3 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
+		return BladeOfJustice
+	end
+	if Judgment:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 4 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
+		return Judgment
+	end
+	if HammerOfWrath:Usable() and Player:HolyPower() <= 4 then
+		return HammerOfWrath
+	end
+	if ConsecrationRet:Usable() and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2))))) then
+		return ConsecrationRet
+	end
+	if Player.aw_remains > 0 or Player.crusade_remains > 0 or (HammerOfWrath.known and Target.healthPercentage <= 20) then
+		if finisher then return finisher end
+	end
+	if CrusaderStrike:Usable() and CrusaderStrike:ChargesFractional() >= 1.75 and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2) and (not ConsecrationRet.known or not ConsecrationRet:Ready(Player.gcd * 2)))))) then
+		return CrusaderStrike
+	end
+	if finisher then return finisher end
+	if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
+		return ConcentratedFlame
+	end
+	if ReapingFlames:Usable() then
+		return ReapingFlames
+	end
+	if CrusaderStrike:Usable() and Player:HolyPower() <= 4 then
+		return CrusaderStrike
 	end
 end
 
@@ -1714,8 +1962,10 @@ function UI:UpdateDisplay()
 
 	if AvengingWrath.known and Player.aw_remains > 0 then
 		text_tl = format('%.1fs', Player.aw_remains)
+	elseif Crusade.known and Player.crusade_remains > 0 then
+		text_tl = format('%.1fs', Player.crusade_remains)
 	end
-	if Consecration.known and Player.consecration_remains > 0 then
+	if (Consecration.known or ConsecrationRet.known) and Player.consecration_remains > 0 then
 		text_bl = format('%.1fs', Player.consecration_remains)
 	end
 
@@ -1755,8 +2005,13 @@ function UI:UpdateCombat()
 	if AvengingWrath.known then
 		Player.aw_remains = AvengingWrath:Remains()
 	end
+	if Crusade.known then
+		Player.crusade_remains = Crusade:Remains()
+	end
 	if Consecration.known then
 		Player.consecration_remains = Consecration:Remains()
+	elseif ConsecrationRet.known then
+		Player.consecration_remains = ConsecrationRet:Remains()
 	end
 
 	trackAuras:Purge()
@@ -1886,6 +2141,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	UI:UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
 		Player.last_ability = ability
+		ability.last_used = Player.time
 		if ability.triggers_gcd then
 			Player.previous_gcd[10] = nil
 			table.insert(Player.previous_gcd, 1, ability)
@@ -1898,9 +2154,6 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
 			retardedPreviousPanel.icon:SetTexture(ability.icon)
 			retardedPreviousPanel:Show()
-		end
-		if ability == Consecration then
-			Consecration.last_used = Player.time
 		end
 		return
 	end
