@@ -88,6 +88,8 @@ local function InitOpts()
 		auto_aoe_ttl = 10,
 		pot = false,
 		trinket = true,
+		defensives = true,
+		blessings = true,
 	})
 end
 
@@ -122,6 +124,7 @@ local Player = {
 	combat_start = 0,
 	spec = 0,
 	target_mode = 0,
+	group_size = 1,
 	gcd = 1.5,
 	health = 0,
 	health_max = 0,
@@ -749,9 +752,22 @@ AvengingWrath.buff_duration = 20
 AvengingWrath.cooldown_duration = 120
 AvengingWrath.autocrit = Ability:Add(294027, true, true)
 AvengingWrath.autocrit.buff_duration = 20
+local BlessingOfProtection = Ability:Add(1022, true, true)
+BlessingOfProtection.buff_duration = 10
+BlessingOfProtection.cooldown_duration = 300
+local DivineShield = Ability:Add(642, true, true)
+DivineShield.buff_duration = 8
+DivineShield.cooldown_duration = 300
+local FlashOfLight = Ability:Add(19750, true, true)
+FlashOfLight.mana_cost = 22
+local Forbearance = Ability:Add(25771, false, false)
+Forbearance.buff_duration = 30
+Forbearance.auraTarget = 'player'
 local HammerOfJustice = Ability:Add(853, false, true)
 HammerOfJustice.buff_duration = 6
 HammerOfJustice.cooldown_duration = 60
+local LayOnHands = Ability:Add(633, true, true)
+LayOnHands.cooldown_duration = 600
 local Rebuke = Ability:Add(96231, false, true)
 Rebuke.buff_duration = 4
 Rebuke.cooldown_duration = 15
@@ -759,7 +775,6 @@ local WordOfGlory = Ability:Add(210191, true, true)
 WordOfGlory.cooldown_duration = 60
 WordOfGlory.power_cost = 3
 WordOfGlory.requires_charge = true
-
 ------ Talents
 
 ------ Procs
@@ -834,6 +849,10 @@ CrusaderStrike.requires_charge = true
 local DivineStorm = Ability:Add(53385, false, true)
 DivineStorm.power_cost = 3
 DivineStorm:AutoAoe(true)
+local GreaterBlessingOfKings = Ability:Add(203538, true, false)
+GreaterBlessingOfKings.buff_duration = 1800
+local GreaterBlessingOfWisdom = Ability:Add(203539, true, false)
+GreaterBlessingOfWisdom.buff_duration = 1800
 local Judgment = Ability:Add(20271, false, true, 197277)
 Judgment.buff_duration = 15
 Judgment.cooldown_duration = 12
@@ -862,6 +881,9 @@ local ExecutionSentence = Ability:Add(267798, false, true, 267799)
 ExecutionSentence.buff_duration = 12
 ExecutionSentence.cooldown_duration = 30
 ExecutionSentence.power_cost = 3
+local EyeForAnEye = Ability:Add(205191, true, true)
+EyeForAnEye.buff_duration = 10
+EyeForAnEye.cooldown_duration = 60
 local FiresOfJustice = Ability:Add(203316, true, true, 209785)
 FiresOfJustice.buff_duration = 15
 local Inquisition = Ability:Add(84963, true, true)
@@ -872,6 +894,8 @@ HammerOfWrath.cooldown_duration = 7.5
 HammerOfWrath.hasted_cooldown = true
 HammerOfWrath.max_range = 30
 HammerOfWrath:SetVelocity(40)
+local SelflessHealer = Ability:Add(85804, true, true, 114250)
+SelflessHealer.buff_duration = 15
 local WakeOfAshes = Ability:Add(255937, false, true)
 WakeOfAshes.buff_duration = 5
 WakeOfAshes.cooldown_duration = 45
@@ -1381,6 +1405,15 @@ function DivineStorm:HolyPowerCost()
 	return Ability.HolyPowerCost(self)
 end
 
+function DivineShield:Usable()
+	if Forbearance:Up() then
+		return false
+	end
+	return Ability.Usable(self)
+end
+LayOnHands.Usable = DivineShield.Usable
+BlessingOfProtection.Usable = DivineShield.Usable
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1547,6 +1580,19 @@ actions.cooldowns+=/use_item,name=razdunks_big_red_button
 end
 
 APL[SPEC.RETRIBUTION].main = function(self)
+	if Opt.defensives and Player:HealthPct() < 75 then
+		if DivineShield:Usable() and Player:HealthPct() < 20 then
+			UseExtra(DivineShield)
+		elseif LayOnHands:Usable() and Player:HealthPct() < 20 then
+			UseExtra(LayOnHands)
+		elseif SelflessHealer.known and FlashOfLight:Usable() and SelflessHealer:Stack() >= 4 and Player:HealthPct() < (Player.group_size < 5 and 75 or 50) then
+			UseExtra(FlashOfLight)
+		elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 30) then
+			UseExtra(WordOfGlory)
+		elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
+			UseExtra(BlessingOfProtection)
+		end
+	end
 	if Player:TimeInCombat() == 0 then
 --[[
 actions.precombat=flask
@@ -1558,6 +1604,13 @@ actions.precombat+=/potion
 actions.precombat+=/use_item,name=azsharas_font_of_power
 actions.precombat+=/arcane_torrent,if=!talent.wake_of_ashes.enabled
 ]]
+		if Opt.blessings and Player.group_size == 1 then
+			if GreaterBlessingOfKings:Usable() and GreaterBlessingOfKings:Remains() < 300 then
+				UseExtra(GreaterBlessingOfKings)
+			elseif GreaterBlessingOfWisdom:Usable() and GreaterBlessingOfWisdom:Remains() < 300 then
+				UseExtra(GreaterBlessingOfWisdom)
+			end
+		end
 		if Opt.pot and not Player:InArenaOrBattleground() then
 			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
 				UseCooldown(FlaskOfTheUndertow)
@@ -1566,13 +1619,19 @@ actions.precombat+=/arcane_torrent,if=!talent.wake_of_ashes.enabled
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
+	elseif Opt.blessings and Player.group_size == 1 then
+		if GreaterBlessingOfKings:Usable() and GreaterBlessingOfKings:Remains() < 30 then
+			UseExtra(GreaterBlessingOfKings)
+		elseif GreaterBlessingOfWisdom:Usable() and GreaterBlessingOfWisdom:Remains() < 30 then
+			UseExtra(GreaterBlessingOfWisdom)
+		end
 	end
 --[[
 actions=auto_attack
 actions+=/rebuke
 actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
-]]
+]]	
 	self:cooldowns()
 	return self:generators()
 end
@@ -1601,8 +1660,12 @@ actions.cooldowns+=/crusade,if=holy_power>=4|holy_power>=3&time<10&talent.wake_o
 	if LightsJudgment:Usable() and Player.enemies >= 2 then
 		UseCooldown(LightsJudgment)
 	end
-	if ShieldOfVengeance:Usable() and Player:UnderAttack() and BloodOfTheEnemy.buff:Down() and MemoryOfLucidDreams:Down() then
-		UseCooldown(ShieldOfVengeance)
+	if Opt.defensives and Player:UnderAttack() and BloodOfTheEnemy.buff:Down() and MemoryOfLucidDreams:Down() and DivineShield:Down() and BlessingOfProtection:Down() then
+		if ShieldOfVengeance:Usable() and (not EyeForAnEye.known or EyeForAnEye:Down()) then
+			UseExtra(ShieldOfVengeance)
+		elseif EyeForAnEye:Usable() and ShieldOfVengeance:Down() then
+			UseExtra(EyeForAnEye)
+		end
 	end
 	if TheUnboundForce:Usable() and (RecklessForce:Up() or RecklessForce.counter:Stack() < 4) then
 		UseCooldown(TheUnboundForce)
@@ -1636,12 +1699,12 @@ actions.finishers+=/execution_sentence,if=spell_targets.divine_storm<=2&(!talent
 actions.finishers+=/divine_storm,if=variable.ds_castable&variable.wings_pool&((!talent.execution_sentence.enabled|(spell_targets.divine_storm>=2|cooldown.execution_sentence.remains>gcd*2))|(cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10))
 actions.finishers+=/templars_verdict,if=variable.wings_pool&(!talent.execution_sentence.enabled|cooldown.execution_sentence.remains>gcd*2|cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10)
 ]]
-	Player.wings_pool = (not Crusade.known and not AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and not Crusade:Ready(Player.gcd * 3))
+	Player.wings_pool = (AvengingWrath.known and not AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and not Crusade:Ready(Player.gcd * 3))
 	Player.ds_castable = Player.enemies >= (RighteousVerdict.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() and Judgment:Down() and DivinePurpose:Down() and AvengingWrath.autocrit:Down())
 	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
 		return Inquisition
 	end
-	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((not Crusade.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7))) then
+	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7))) then
 		return ExecutionSentence
 	end
 	if Player.ds_castable and Player.wings_pool and DivineStorm:Usable() and ((not ExecutionSentence.known or (Player.enemies >= 2 or not ExecutionSentence:Ready(Player.gcd * 2))) or ((AvengingWrath.known and between(AvengingWrath:Cooldown(), Player.gcd * 3, 10)) or (Crusade.known and between(Crusade:Cooldown(), Player.gcd * 3, 10) or (Player.crusade_remains > 0 and Crusade:Stack() < 10)))) then
@@ -2631,6 +2694,18 @@ function SlashCmdList.Retarded(msg, editbox)
 		end
 		return Status('Show on-use trinkets in cooldown UI', Opt.trinket)
 	end
+	if startsWith(msg[1], 'de') then
+		if msg[2] then
+			Opt.defensives = msg[2] == 'on'
+		end
+		return Status('Show defensives/emergency heals in extra UI', Opt.defensives)
+	end
+	if startsWith(msg[1], 'bl') then
+		if msg[2] then
+			Opt.blessings = msg[2] == 'on'
+		end
+		return Status('show Greater Blessings reminders in extra UI (solo only)', Opt.blessings)
+	end
 	if msg[1] == 'reset' then
 		retardedPanel:ClearAllPoints()
 		retardedPanel:SetPoint('CENTER', 0, -169)
@@ -2661,6 +2736,8 @@ function SlashCmdList.Retarded(msg, editbox)
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
+		'defensives |cFF00C000on|r/|cFFC00000off|r - show defensives/emergency heals in extra UI',
+		'blessings |cFF00C000on|r/|cFFC00000off|r - show Greater Blessings reminders in extra UI (solo only)',
 		'|cFFFFD000reset|r - reset the location of the Retarded UI to default',
 	} do
 		print('  ' .. SLASH_Retarded1 .. ' ' .. cmd)
