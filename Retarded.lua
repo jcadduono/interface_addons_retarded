@@ -1587,7 +1587,7 @@ APL[SPEC.RETRIBUTION].main = function(self)
 			UseExtra(LayOnHands)
 		elseif SelflessHealer.known and FlashOfLight:Usable() and SelflessHealer:Stack() >= 4 and Player:HealthPct() < (Player.group_size < 5 and 75 or 50) then
 			UseExtra(FlashOfLight)
-		elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 30) then
+		elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 35) then
 			UseExtra(WordOfGlory)
 		elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
 			UseExtra(BlessingOfProtection)
