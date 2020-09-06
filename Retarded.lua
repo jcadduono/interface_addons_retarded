@@ -766,6 +766,9 @@ Forbearance.auraTarget = 'player'
 local HammerOfJustice = Ability:Add(853, false, true)
 HammerOfJustice.buff_duration = 6
 HammerOfJustice.cooldown_duration = 60
+local HandOfReckoning = Ability:Add(62124, false, true)
+HandOfReckoning.buff_duration = 4
+HandOfReckoning.cooldown_duration = 8
 local LayOnHands = Ability:Add(633, true, true)
 LayOnHands.cooldown_duration = 600
 local Rebuke = Ability:Add(96231, false, true)
@@ -1008,7 +1011,10 @@ RecklessForce.counter = Ability:Add(302917, true, true)
 RecklessForce.counter.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
-
+-- PvP talents
+local HammerOfReckoning = Ability:Add(247675, true, true, 247677)
+HammerOfReckoning.buff_duration = 30
+HammerOfReckoning.cooldown_duration = 60
 -- Racials
 local LightsJudgment = Ability:Add(255647, false, true)
 LightsJudgment.buff_duration = 3
@@ -1414,6 +1420,13 @@ end
 LayOnHands.Usable = DivineShield.Usable
 BlessingOfProtection.Usable = DivineShield.Usable
 
+function HammerOfReckoning:Usable()
+	if self:Stack() < 50 or Player.aw_remains > 0 or Player.crusade_remains > 0 then
+		return false
+	end
+	return Ability.Usable(self)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1682,10 +1695,13 @@ actions.cooldowns+=/crusade,if=holy_power>=4|holy_power>=3&time<10&talent.wake_o
 	elseif PurifyingBlast:Usable() then
 		UseCooldown(PurifyingBlast)
 	end
-	if AvengingWrath:Usable() and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
+	if HammerOfReckoning:Usable() and Player:HolyPower() >= 4 then
+		UseCooldown(HammerOfReckoning)
+	end
+	if AvengingWrath:Usable() and Player.aw_remains == 0 and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
 		UseCooldown(AvengingWrath)
 	end
-	if Crusade:Usable() and (Player:HolyPower() >= 4 or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
+	if Crusade:Usable() and Player.crusade_remains == 0 and (Player:HolyPower() >= 4 or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
 		UseCooldown(Crusade)
 	end
 end
