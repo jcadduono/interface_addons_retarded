@@ -483,8 +483,7 @@ function Ability:Remains()
 		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
-		end
-		if self:Match(id) then
+		elseif self:Match(id) then
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
@@ -570,8 +569,7 @@ function Ability:Stack()
 		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
 			return 0
-		end
-		if self:Match(id) then
+		elseif self:Match(id) then
 			return (expires == 0 or expires - Player.ctime > Player.execute_remains) and count or 0
 		end
 	end
@@ -1197,7 +1195,9 @@ function Player:BloodlustActive()
 	local _, i, id
 	for i = 1, 40 do
 		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
-		if (
+		if not id then
+			return false
+		elseif (
 			id == 2825 or   -- Bloodlust (Horde Shaman)
 			id == 32182 or  -- Heroism (Alliance Shaman)
 			id == 80353 or  -- Time Warp (Mage)
@@ -1208,6 +1208,20 @@ function Player:BloodlustActive()
 			id == 146555 or -- Drums of Rage (Leatherworking)
 			id == 230935 or -- Drums of the Mountain (Leatherworking)
 			id == 256740    -- Drums of the Maelstrom (Leatherworking)
+		) then
+			return true
+		end
+	end
+end
+
+function Player:Dazed()
+	local _, i, id
+	for i = 1, 40 do
+		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HARMFUL')
+		if not id then
+			return false
+		elseif (
+			id == 1604 -- Dazed (hit from behind)
 		) then
 			return true
 		end
@@ -1473,7 +1487,7 @@ APL[SPEC.PROTECTION].main = function(self)
 				UseExtra(BlessingOfProtection)
 			end
 		end
-		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() then
+		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() and not Player:Dazed() then
 			UseExtra(BlessingOfFreedom)
 		end
 	end
@@ -1627,7 +1641,7 @@ APL[SPEC.RETRIBUTION].main = function(self)
 				UseExtra(BlessingOfProtection)
 			end
 		end
-		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() then
+		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() and not Player:Dazed() then
 			UseExtra(BlessingOfFreedom)
 		end
 	end
