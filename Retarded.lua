@@ -1740,7 +1740,7 @@ actions.finishers+=/execution_sentence,if=spell_targets.divine_storm<=2&(!talent
 actions.finishers+=/divine_storm,if=variable.ds_castable&variable.wings_pool&((!talent.execution_sentence.enabled|(spell_targets.divine_storm>=2|cooldown.execution_sentence.remains>gcd*2))|(cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10))
 actions.finishers+=/templars_verdict,if=variable.wings_pool&(!talent.execution_sentence.enabled|cooldown.execution_sentence.remains>gcd*2|cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10)
 ]]
-	Player.wings_pool = (AvengingWrath.known and not AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and not Crusade:Ready(Player.gcd * 3))
+	Player.wings_pool = (AvengingWrath.known and (Player.aw_remains > 0 or not AvengingWrath:Ready(Player.gcd * 3))) or (Crusade.known and (Player.crusade_remains > 0 or not Crusade:Ready(Player.gcd * 3)))
 	Player.ds_castable = Player.enemies >= (RighteousVerdict.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() and Judgment:Down() and DivinePurpose:Down() and AvengingWrath.autocrit:Down())
 	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
 		return Inquisition
