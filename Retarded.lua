@@ -1683,7 +1683,8 @@ actions=auto_attack
 actions+=/rebuke
 actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
-]]	
+]]
+	Player.use_wings = (not AvengingWrath.known or Player.aw_remains == 0) and (not Crusade.known or Player.crusade_remains == 0) and (Target.boss or Target.timeToDie > (Player.gcd * 5) or Player.enemies >= 3)
 	self:cooldowns()
 	return self:generators()
 end
@@ -1737,10 +1738,10 @@ actions.cooldowns+=/crusade,if=holy_power>=4|holy_power>=3&time<10&talent.wake_o
 	if HammerOfReckoning:Usable() and Player:HolyPower() >= 4 then
 		UseCooldown(HammerOfReckoning)
 	end
-	if AvengingWrath:Usable() and Player.aw_remains == 0 and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
+	if Player.use_wings and AvengingWrath:Usable() and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
 		UseCooldown(AvengingWrath)
 	end
-	if Crusade:Usable() and Player.crusade_remains == 0 and (Player:HolyPower() >= 4 or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
+	if Player.use_wings and Crusade:Usable() and (Player:HolyPower() >= 4 or (WakeOfAshes.known and Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
 		UseCooldown(Crusade)
 	end
 end
@@ -1754,7 +1755,7 @@ actions.finishers+=/execution_sentence,if=spell_targets.divine_storm<=2&(!talent
 actions.finishers+=/divine_storm,if=variable.use_ds&!variable.pool_for_wings&((!talent.execution_sentence.enabled|(spell_targets.divine_storm>=2|cooldown.execution_sentence.remains>gcd*2))|(cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10))
 actions.finishers+=/templars_verdict,if=variable.pool_for_wings&(!talent.execution_sentence.enabled|cooldown.execution_sentence.remains>gcd*2|cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10)
 ]]
-	Player.pool_for_wings = (AvengingWrath.known and Player.aw_remains == 0 and AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and Player.crusade_remains == 0 and Crusade:Ready(Player.gcd * 3))
+	Player.pool_for_wings = Player.use_wings and ((AvengingWrath.known and AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and Crusade:Ready(Player.gcd * 3)))
 	Player.use_ds = Player.enemies >= (RighteousVerdict.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() and Judgment:Down() and DivinePurpose:Down() and AvengingWrath.autocrit:Down())
 	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
 		return Inquisition
