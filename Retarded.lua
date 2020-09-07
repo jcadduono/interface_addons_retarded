@@ -133,6 +133,8 @@ local Player = {
 	mana_regen = 0,
 	holy_power = 0,
 	holy_power_max = 5,
+	moving = false,
+	movement_speed = 100,
 	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -752,7 +754,7 @@ AvengingWrath.buff_duration = 20
 AvengingWrath.cooldown_duration = 120
 AvengingWrath.autocrit = Ability:Add(294027, true, true)
 AvengingWrath.autocrit.buff_duration = 20
-local BlessingOfProtection = Ability:Add(1022, true, true)
+local BlessingOfProtection = Ability:Add(1022, true, false)
 BlessingOfProtection.buff_duration = 10
 BlessingOfProtection.cooldown_duration = 300
 local DivineShield = Ability:Add(642, true, true)
@@ -766,6 +768,10 @@ Forbearance.auraTarget = 'player'
 local HammerOfJustice = Ability:Add(853, false, true)
 HammerOfJustice.buff_duration = 6
 HammerOfJustice.cooldown_duration = 60
+local BlessingOfFreedom = Ability:Add(1044, true, false)
+BlessingOfFreedom.buff_duration = 8
+BlessingOfFreedom.cooldown_duration = 25
+BlessingOfFreedom.mana_cost = 7
 local HandOfReckoning = Ability:Add(62124, false, true)
 HandOfReckoning.buff_duration = 4
 HandOfReckoning.cooldown_duration = 8
@@ -1457,6 +1463,20 @@ APL[SPEC.HOLY].main = function(self)
 end
 
 APL[SPEC.PROTECTION].main = function(self)
+	if Opt.defensives then
+		if Player:HealthPct() < 75 then
+			if LayOnHands:Usable() and Player:HealthPct() < 20 then
+				UseExtra(LayOnHands)
+			elseif DivineShield:Usable() and Player:HealthPct() < 20 then
+				UseExtra(DivineShield)
+			elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
+				UseExtra(BlessingOfProtection)
+			end
+		end
+		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() then
+			UseExtra(BlessingOfFreedom)
+		end
+	end
 	if Player:TimeInCombat() == 0 then
 --[[
 actions.precombat=flask
@@ -1593,17 +1613,22 @@ actions.cooldowns+=/use_item,name=razdunks_big_red_button
 end
 
 APL[SPEC.RETRIBUTION].main = function(self)
-	if Opt.defensives and Player:HealthPct() < 75 then
-		if DivineShield:Usable() and Player:HealthPct() < 20 then
-			UseExtra(DivineShield)
-		elseif LayOnHands:Usable() and Player:HealthPct() < 20 then
-			UseExtra(LayOnHands)
-		elseif SelflessHealer.known and FlashOfLight:Usable() and SelflessHealer:Stack() >= 4 and Player:HealthPct() < (Player.group_size < 5 and 75 or 50) then
-			UseExtra(FlashOfLight)
-		elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 35) then
-			UseExtra(WordOfGlory)
-		elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
-			UseExtra(BlessingOfProtection)
+	if Opt.defensives then
+		if Player:HealthPct() < 75 then
+			if DivineShield:Usable() and Player:HealthPct() < 20 then
+				UseExtra(DivineShield)
+			elseif LayOnHands:Usable() and Player:HealthPct() < 20 then
+				UseExtra(LayOnHands)
+			elseif SelflessHealer.known and FlashOfLight:Usable() and SelflessHealer:Stack() >= 4 and Player:HealthPct() < (Player.group_size < 5 and 75 or 50) then
+				UseExtra(FlashOfLight)
+			elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 35) then
+				UseExtra(WordOfGlory)
+			elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
+				UseExtra(BlessingOfProtection)
+			end
+		end
+		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() then
+			UseExtra(BlessingOfFreedom)
 		end
 	end
 	if Player:TimeInCombat() == 0 then
@@ -2056,7 +2081,7 @@ end
 
 function UI:UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellId
+	local _, start, duration, remains, spellId, speed, max_speed
 	Player.ctime = GetTime()
 	Player.time = Player.ctime - Player.time_diff
 	Player.main =  nil
@@ -2078,8 +2103,10 @@ function UI:UpdateCombat()
 		Player.mana = Player.mana - Player.ability_casting:ManaCost()
 	end
 	Player.mana = min(max(Player.mana, 0), Player.mana_max)
-	Player.moving = GetUnitSpeed('player') ~= 0
 	Player.holy_power = UnitPower('player', 9)
+	speed, max_speed = GetUnitSpeed('player')
+	Player.moving = speed ~= 0
+	Player.movement_speed = max_speed / 7 * 100
 
 	if AvengingWrath.known then
 		Player.aw_remains = AvengingWrath:Remains()
