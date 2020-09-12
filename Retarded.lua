@@ -1016,6 +1016,7 @@ RecklessForce.counter.essence_id = 28
 local StriveForPerfection = Ability:Add(299369, true, true)
 StriveForPerfection.essence_id = 22
 -- PvP talents
+local DivinePunisher = Ability:Add(204914, true, true, 216762)
 local HammerOfReckoning = Ability:Add(247675, true, true, 247677)
 HammerOfReckoning.buff_duration = 30
 HammerOfReckoning.cooldown_duration = 60
@@ -1440,6 +1441,13 @@ end
 LayOnHands.Usable = DivineShield.Usable
 BlessingOfProtection.Usable = DivineShield.Usable
 
+function DivinePunisher:Remains()
+	if self.target and self.target == Target.guid then
+		return 60
+	end
+	return 0
+end
+
 function HammerOfReckoning:Usable()
 	if self:Stack() < 50 or Player.aw_remains > 0 or Player.crusade_remains > 0 then
 		return false
@@ -1802,7 +1810,7 @@ actions.generators+=/arcane_torrent,if=holy_power<=4
 	if BladeOfJustice:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 3 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
 		return BladeOfJustice
 	end
-	if Judgment:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 4 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
+	if Judgment:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 4 and DivinePunisher:Down() and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
 		return Judgment
 	end
 	if HammerOfWrath:Usable() and Player:HolyPower() <= 4 then
@@ -1811,7 +1819,7 @@ actions.generators+=/arcane_torrent,if=holy_power<=4
 	if ConsecrationRet:Usable() and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2))))) then
 		return ConsecrationRet
 	end
-	if Player.aw_remains > 0 or Player.crusade_remains > 0 or (HammerOfWrath.known and Target.healthPercentage <= 20) then
+	if Player.aw_remains > 0 or Player.crusade_remains > 0 or (HammerOfWrath.known and Target.healthPercentage <= 20) or (DivinePunisher:Up() and Judgment:Ready(Player.gcd)) then
 		if finisher then return finisher end
 	end
 	if CrusaderStrike:Usable() and CrusaderStrike:ChargesFractional() >= 1.75 and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2) and (not ConsecrationRet.known or not ConsecrationRet:Ready(Player.gcd * 2)))))) then
@@ -2255,6 +2263,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_ABSORBED' or
 	   eventType == 'SPELL_PERIODIC_DAMAGE' or
 	   eventType == 'SPELL_MISSED' or
+	   eventType == 'SPELL_ENERGIZE' or
 	   eventType == 'SPELL_AURA_APPLIED' or
 	   eventType == 'SPELL_AURA_REFRESH' or
 	   eventType == 'SPELL_AURA_REMOVED')
@@ -2279,7 +2288,14 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			retardedPreviousPanel.icon:SetTexture(ability.icon)
 			retardedPreviousPanel:Show()
 		end
+		if ability == Judgment and DivinePunisher.known then
+			DivinePunisher.target = dstGUID
+		end
 		return
+	elseif eventType == 'SPELL_ENERGIZE' then
+		if ability == DivinePunisher then
+			DivinePunisher.target = nil
+		end
 	end
 
 	if dstGUID == Player.guid then
