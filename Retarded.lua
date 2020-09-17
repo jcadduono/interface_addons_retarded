@@ -1838,6 +1838,9 @@ actions.generators+=/arcane_torrent,if=holy_power<=4
 end
 
 APL.Interrupt = function(self)
+	if AvengersShield:Usable() then
+		return AvengersShield
+	end
 	if Rebuke:Usable() then
 		return Rebuke
 	end
