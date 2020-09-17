@@ -1549,7 +1549,8 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 	end
 	if ShieldOfTheRighteous:Usable() and (
 		(AvengersValor:Up() and ShieldOfTheRighteous:ChargesFractional() >= 2.5 and (not Seraphim.known or not Seraphim:Ready(Player.gcd))) or
-		((not Seraphim.known and between(Player.aw_remains, 0.1, 4)) or (Seraphim.known and between(Seraphim:Remains(), 0.1, 4))) or
+		(not Seraphim.known and between(Player.aw_remains, 0.1, 4) and (ShieldOfTheRighteous:ChargesFractional() >= 1.7 or not AvengersShield:Ready(Player.aw_remains - 0.5))) or
+		(Seraphim.known and between(Seraphim:Remains(), 0.1, 4) and (ShieldOfTheRighteous:ChargesFractional() >= 1.7 or not AvengersShield:Ready(Seraphim:Remains() - 0.5))) or
 		((not Seraphim.known or Seraphim:Up()) and (not AvengingWrath.known or not AvengingWrath:Ready(4) or Player.aw_remains > 0) and (((ShieldOfTheRighteous.buff:Down() or AvengersShield:Ready()) and AvengersValor:Up()) or (ShieldOfTheRighteous:ChargesFractional() >= 2.5 and not AvengersShield:Ready() or AvengersValor:Up())))
 	) then
 		UseCooldown(ShieldOfTheRighteous, true)
