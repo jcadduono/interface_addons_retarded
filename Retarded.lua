@@ -1623,7 +1623,7 @@ actions.cooldowns+=/use_item,name=razdunks_big_red_button
 	if Seraphim:Usable() and ShieldOfTheRighteous:ChargesFractional() >= 2 then
 		UseCooldown(Seraphim)
 	end
-	if AvengingWrath:Usable() and (not Seraphim.known or Seraphim:Up() or Seraphim:Ready(2)) then
+	if AvengingWrath:Usable() and Player.aw_remains == 0 and (not Seraphim.known or Seraphim:Up() or Seraphim:Ready(2)) then
 		UseCooldown(AvengingWrath)
 	end
 	if MemoryOfLucidDreams:Usable() and (not Seraphim.known or Seraphim:Ready(Player.gcd) or Seraphim:Up()) then
