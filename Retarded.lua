@@ -1094,6 +1094,8 @@ end
 -- Inventory Items
 local GreaterFlaskOfTheUndertow = InventoryItem:Add(168654)
 GreaterFlaskOfTheUndertow.buff = Ability:Add(298841, true, true)
+local LightningForgedAugmentRune = InventoryItem:Add(174906)
+LightningForgedAugmentRune.buff = Ability:Add(317065, true, true)
 local PotionOfUnbridledFury = InventoryItem:Add(169299)
 PotionOfUnbridledFury.buff = Ability:Add(300714, true, true)
 PotionOfUnbridledFury.buff.triggers_gcd = false
@@ -1510,11 +1512,14 @@ actions.precombat+=/potion
 actions.precombat+=/consecration
 actions.precombat+=/lights_judgment
 ]]
-		if Opt.pot and not Player:InArenaOrBattleground() then
-			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
+		if not Player:InArenaOrBattleground() then
+			if Opt.pot and GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
 				UseCooldown(GreaterFlaskOfTheUndertow)
 			end
-			if Target.boss and PotionOfUnbridledFury:Usable() then
+			if LightningForgedAugmentRune:Usable() and LightningForgedAugmentRune.buff:Remains() < 300 then
+				UseCooldown(LightningForgedAugmentRune)
+			end
+			if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() then
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
@@ -1672,11 +1677,14 @@ actions.precombat+=/arcane_torrent,if=!talent.wake_of_ashes.enabled
 				UseExtra(GreaterBlessingOfWisdom)
 			end
 		end
-		if Opt.pot and not Player:InArenaOrBattleground() then
-			if GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
-				UseCooldown(FlaskOfTheUndertow)
+		if not Player:InArenaOrBattleground() then
+			if Opt.pot and GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
+				UseCooldown(GreaterFlaskOfTheUndertow)
 			end
-			if Target.boss and PotionOfUnbridledFury:Usable() then
+			if LightningForgedAugmentRune:Usable() and LightningForgedAugmentRune.buff:Remains() < 300 then
+				UseCooldown(LightningForgedAugmentRune)
+			end
+			if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() then
 				UseCooldown(PotionOfUnbridledFury)
 			end
 		end
