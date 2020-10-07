@@ -1563,7 +1563,7 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 	if Seraphim.known and LightsJudgment:Usable() and Seraphim:Up() and Seraphim:Remains() < 3 then
 		UseCooldown(LightsJudgment)
 	end
-	if Consecration:Usable() and Player.consecration_remains < 0.5 then
+	if Consecration:Usable() and Player.consecration_remains < Player.haste_factor then
 		return Consecration
 	end
 	if AvengersShield:Usable() and (Player.enemies > 1 or ShieldOfTheRighteous:ChargesFractional() >= 2.3 or (ShieldOfTheRighteous:Ready() and ShieldOfTheRighteous.buff:Down())) then
@@ -1593,7 +1593,7 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 	if HammerOfTheRighteous:Usable() then
 		return HammerOfTheRighteous
 	end
-	if Consecration:Usable() then
+	if Consecration:Usable() and (Player.consecration_remains < 4 or not (JudgmentProt:Ready(Player.haste_factor) or AvengersShield:Ready(Player.haste_factor))) then
 		return Consecration
 	end
 	if VigilantProtector:Usable() then
