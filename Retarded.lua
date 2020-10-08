@@ -2444,7 +2444,7 @@ function events:SPELL_UPDATE_COOLDOWN()
 end
 
 function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName == 'player' and powerType == 'RUNIC_POWER' then
+	if srcName == 'player' and powerType == 'HOLY_POWER' then
 		UI:UpdateCombatWithin(0.05)
 	end
 end
