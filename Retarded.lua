@@ -1777,7 +1777,7 @@ actions.finishers+=/templars_verdict,if=variable.pool_for_wings&(!talent.executi
 	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
 		return Inquisition
 	end
-	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7))) then
+	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7)) or not (AvengingWrath.known or Crusade.known)) then
 		return ExecutionSentence
 	end
 	if Player.pool_for_wings then
@@ -1813,7 +1813,7 @@ actions.generators+=/arcane_torrent,if=holy_power<=4
 	if Player:HolyPower() >= 5 or MemoryOfLucidDreams:Up() or BloodOfTheEnemy.buff:Up() or (Inquisition.known and Inquisition:Down() and Player:HolyPower() >= 3) then
 		if finisher then return finisher end
 	end
-	if WakeOfAshes:Usable() and (Player:HolyPower() <= 0 or (Player:HolyPower() <= 1 and not BladeOfJustice:Ready(Player.gcd))) and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and not Crusade:Ready(10))) then
+	if WakeOfAshes:Usable() and (Player:HolyPower() <= 0 or (Player:HolyPower() <= 1 and not BladeOfJustice:Ready(Player.gcd))) and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and not Crusade:Ready(10)) or not (AvengingWrath.known or Crusade.known)) then
 		UseCooldown(WakeOfAshes)
 	end
 	if BladeOfJustice:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 3 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
