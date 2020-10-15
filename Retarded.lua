@@ -2025,15 +2025,15 @@ UI.anchor_points = {
 	blizzard = { -- Blizzard Personal Resource Display (Default)
 		[SPEC.HOLY] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
 		},
 		[SPEC.PROTECTION] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
 		},
 		[SPEC.RETRIBUTION] = {
 			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -9 }
+			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
 		},
 	},
 	kui = { -- Kui Nameplates
