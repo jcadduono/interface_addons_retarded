@@ -813,8 +813,9 @@ local HammerOfTheRighteous = Ability:Add(53595, false, true)
 HammerOfTheRighteous.cooldown_duration = 4.5
 HammerOfTheRighteous.requires_charge = true
 HammerOfTheRighteous:AutoAoe()
-local JudgmentProt = Ability:Add(275779, false, true)
-JudgmentProt.cooldown_duration = 12
+local JudgmentProt = Ability:Add(275779, false, true, 197277)
+JudgmentProt.buff_duration = 15
+JudgmentProt.cooldown_duration = 6
 JudgmentProt.mana_cost = 3
 JudgmentProt.max_range = 30
 JudgmentProt.hasted_cooldown = true
@@ -1562,11 +1563,8 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 		UseCooldown(WorldveinResonance)
 	end
 	if ShieldOfTheRighteous:Usable() and (
-		(not Player.pool_for_wings and ShieldOfTheRighteous.buff:Down()) or
-		(DivinePurpose.known and DivinePurpose:Up()) or
-		(not Seraphim.known and between(Player.aw_remains, 0.1, 4)) or
-		(Seraphim.known and between(Seraphim:Remains(), 0.1, 4)) or
-		(not Player.pool_for_wings and Player:HolyPower() >= 5)
+		((not Player.pool_for_wings or DivinePurpose.known and DivinePurpose:Up()) and (Player:HolyPower() >= 5 or ShieldOfTheRighteous.buff:Down() or JudgmentProt:Up())) or
+		(not Seraphim.known and between(Player.aw_remains, 0.1, 3)) or (Seraphim.known and between(Seraphim:Remains(), 0.1, 3))
 	) then
 		UseCooldown(ShieldOfTheRighteous, true)
 	end
@@ -1579,11 +1577,14 @@ actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldve
 	if AvengersShield:Usable() and Player.enemies >= 3 then
 		return AvengersShield
 	end
-	if JudgmentProt:Usable() and (not CrusadersJudgment.known or JudgmentProt:ChargesFractional() > 1.5) then
+	if JudgmentProt:Usable() and (not CrusadersJudgment.known or JudgmentProt:ChargesFractional() > 1.5 or (JudgmentProt:Down() and Player:HolyPower() == 4)) then
 		return JudgmentProt
 	end
 	if AvengersShield:Usable() then
 		return AvengersShield
+	end
+	if HammerOfWrath:Usable() then
+		return HammerOfWrath
 	end
 	if JudgmentProt:Usable() then
 		return JudgmentProt
