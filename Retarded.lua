@@ -1,14 +1,28 @@
+local ADDON = 'Retarded'
 if select(2, UnitClass('player')) ~= 'PALADIN' then
-	DisableAddOn('Retarded')
+	DisableAddOn(ADDON)
 	return
 end
+local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
 -- copy heavily accessed global functions into local scope for performance
-local GetSpellCooldown = _G.GetSpellCooldown
+local min = math.min
+local max = math.max
+local floor = math.floor
+local GetPowerRegen = _G.GetPowerRegen
 local GetSpellCharges = _G.GetSpellCharges
+local GetSpellCooldown = _G.GetSpellCooldown
+local GetSpellInfo = _G.GetSpellInfo
 local GetTime = _G.GetTime
+local GetUnitSpeed = _G.GetUnitSpeed
 local UnitCastingInfo = _G.UnitCastingInfo
+local UnitChannelInfo = _G.UnitChannelInfo
 local UnitAura = _G.UnitAura
+local UnitHealth = _G.UnitHealth
+local UnitHealthMax = _G.UnitHealthMax
+local UnitPower = _G.UnitPower
+local UnitPowerMax = _G.UnitPowerMax
+local UnitThreatSituation = _G.UnitThreatSituation
 -- end copy global functions
 
 -- useful functions
@@ -20,15 +34,15 @@ local function startsWith(str, start) -- case insensitive check to see if a stri
 	if type(str) ~= 'string' then
 		return false
 	end
-   return string.lower(str:sub(1, start:len())) == start:lower()
+	return string.lower(str:sub(1, start:len())) == start:lower()
 end
 -- end useful functions
 
 Retarded = {}
 local Opt -- use this as a local table reference to Retarded
 
-SLASH_Retarded1, SLASH_Retarded2 = '/ret', '/retard'
-BINDING_HEADER_RETARDED = 'Retarded'
+SLASH_Retarded1, SLASH_Retarded2, SLASH_Retarded3 = '/ret', '/retard', '/retarded'
+BINDING_HEADER_RETARDED = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
@@ -51,7 +65,6 @@ local function InitOpts()
 	end
 	SetDefaults(Retarded, { -- defaults
 		locked = false,
-		snap = false,
 		scale = {
 			main = 1,
 			previous = 0.7,
@@ -68,11 +81,6 @@ local function InitOpts()
 			blizzard = false,
 			color = { r = 1, g = 1, b = 1 },
 		},
-		hide = {
-			holy = false,
-			protection = false,
-			retribution = false,
-		},
 		alpha = 1,
 		frequency = 0.2,
 		previous = true,
@@ -86,10 +94,9 @@ local function InitOpts()
 		aoe = false,
 		auto_aoe = false,
 		auto_aoe_ttl = 10,
+		cd_ttd = 8,
 		pot = false,
 		trinket = true,
-		defensives = true,
-		auras = true,
 	})
 end
 
@@ -108,54 +115,42 @@ local timer = {
 	health = 0
 }
 
--- specialization constants
-local SPEC = {
-	NONE = 0,
-	HOLY = 1,
-	PROTECTION = 2,
-	RETRIBUTION = 3,
-}
-
 -- current player information
 local Player = {
 	time = 0,
 	time_diff = 0,
 	ctime = 0,
 	combat_start = 0,
-	spec = 0,
+	level = 1,
 	target_mode = 0,
-	group_size = 1,
+	execute_remains = 0,
+	haste_factor = 1,
 	gcd = 1.5,
+	gcd_remains = 0,
 	health = 0,
 	health_max = 0,
 	mana = 0,
-	mana_max = 100,
+	mana_base = 0,
+	mana_max = 0,
 	mana_regen = 0,
-	holy_power = 0,
-	holy_power_max = 5,
+	group_size = 1,
 	moving = false,
 	movement_speed = 100,
+	threat = 0,
 	last_swing_taken = 0,
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
-		[174044] = true, -- Humming Black Dragonscale (parachute)
 	},
-	aw_remains = 0,
-	crusade_remains = 0,
-	consecration_remains = 0,
 }
 
 -- current target information
 local Target = {
 	boss = false,
 	guid = 0,
-	healthArray = {},
+	health_array = {},
 	hostile = false,
 	estimated_range = 30,
 }
-
--- Azerite trait API access
-local Azerite = {}
 
 local retardedPanel = CreateFrame('Frame', 'retardedPanel', UIParent)
 retardedPanel:SetPoint('CENTER', 0, -169)
@@ -168,7 +163,7 @@ retardedPanel.icon:SetAllPoints(retardedPanel)
 retardedPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 retardedPanel.border = retardedPanel:CreateTexture(nil, 'ARTWORK')
 retardedPanel.border:SetAllPoints(retardedPanel)
-retardedPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+retardedPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 retardedPanel.border:Hide()
 retardedPanel.dimmer = retardedPanel:CreateTexture(nil, 'BORDER')
 retardedPanel.dimmer:SetAllPoints(retardedPanel)
@@ -195,7 +190,7 @@ retardedPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
 retardedPanel.text.br:SetPoint('BOTTOMRIGHT', retardedPanel, 'BOTTOMRIGHT', -2.5, 3)
 retardedPanel.text.br:SetJustifyH('RIGHT')
 retardedPanel.text.center = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 9, 'OUTLINE')
+retardedPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 11, 'OUTLINE')
 retardedPanel.text.center:SetAllPoints(retardedPanel.text)
 retardedPanel.text.center:SetJustifyH('CENTER')
 retardedPanel.text.center:SetJustifyV('CENTER')
@@ -215,7 +210,7 @@ retardedPreviousPanel.icon:SetAllPoints(retardedPreviousPanel)
 retardedPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 retardedPreviousPanel.border = retardedPreviousPanel:CreateTexture(nil, 'ARTWORK')
 retardedPreviousPanel.border:SetAllPoints(retardedPreviousPanel)
-retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+retardedPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 local retardedCooldownPanel = CreateFrame('Frame', 'retardedCooldownPanel', UIParent)
 retardedCooldownPanel:SetSize(64, 64)
 retardedCooldownPanel:SetFrameStrata('BACKGROUND')
@@ -229,7 +224,7 @@ retardedCooldownPanel.icon:SetAllPoints(retardedCooldownPanel)
 retardedCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 retardedCooldownPanel.border = retardedCooldownPanel:CreateTexture(nil, 'ARTWORK')
 retardedCooldownPanel.border:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+retardedCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 retardedCooldownPanel.cd = CreateFrame('Cooldown', nil, retardedCooldownPanel, 'CooldownFrameTemplate')
 retardedCooldownPanel.cd:SetAllPoints(retardedCooldownPanel)
 local retardedInterruptPanel = CreateFrame('Frame', 'retardedInterruptPanel', UIParent)
@@ -245,7 +240,7 @@ retardedInterruptPanel.icon:SetAllPoints(retardedInterruptPanel)
 retardedInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 retardedInterruptPanel.border = retardedInterruptPanel:CreateTexture(nil, 'ARTWORK')
 retardedInterruptPanel.border:SetAllPoints(retardedInterruptPanel)
-retardedInterruptPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+retardedInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 retardedInterruptPanel.cast = CreateFrame('Cooldown', nil, retardedInterruptPanel, 'CooldownFrameTemplate')
 retardedInterruptPanel.cast:SetAllPoints(retardedInterruptPanel)
 local retardedExtraPanel = CreateFrame('Frame', 'retardedExtraPanel', UIParent)
@@ -261,51 +256,35 @@ retardedExtraPanel.icon:SetAllPoints(retardedExtraPanel)
 retardedExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
 retardedExtraPanel.border = retardedExtraPanel:CreateTexture(nil, 'ARTWORK')
 retardedExtraPanel.border:SetAllPoints(retardedExtraPanel)
-retardedExtraPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+retardedExtraPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 
 -- Start AoE
 
 Player.target_modes = {
-	[SPEC.NONE] = {
-		{1, ''}
-	},
-	[SPEC.HOLY] = {
-		{1, ''},
-		{2, '2'},
-		{3, '3'},
-		{4, '4+'},
-	},
-	[SPEC.PROTECTION] = {
-		{1, ''},
-		{2, '2'},
-		{3, '3'},
-		{4, '4+'},
-	},
-	[SPEC.RETRIBUTION] = {
-		{1, ''},
-		{2, '2'},
-		{3, '3'},
-		{4, '4+'},
-	},
+	{1, ''},
+	{2, '2'},
+	{3, '3'},
+	{4, '4'},
+	{5, '5+'},
 }
 
 function Player:SetTargetMode(mode)
 	if mode == self.target_mode then
 		return
 	end
-	self.target_mode = min(mode, #self.target_modes[self.spec])
-	self.enemies = self.target_modes[self.spec][self.target_mode][1]
-	retardedPanel.text.br:SetText(self.target_modes[self.spec][self.target_mode][2])
+	self.target_mode = min(mode, #self.target_modes)
+	self.enemies = self.target_modes[self.target_mode][1]
+	retardedPanel.text.br:SetText(self.target_modes[self.target_mode][2])
 end
 
 function Player:ToggleTargetMode()
 	local mode = self.target_mode + 1
-	self:SetTargetMode(mode > #self.target_modes[self.spec] and 1 or mode)
+	self:SetTargetMode(mode > #self.target_modes and 1 or mode)
 end
 
 function Player:ToggleTargetModeReverse()
 	local mode = self.target_mode - 1
-	self:SetTargetMode(mode < 1 and #self.target_modes[self.spec] or mode)
+	self:SetTargetMode(mode < 1 and #self.target_modes or mode)
 end
 
 -- Target Mode Keybinding Wrappers
@@ -330,7 +309,6 @@ local autoAoe = {
 	blacklist = {},
 	ignored_units = {
 		[120651] = true, -- Explosives (Mythic+ affix)
-		[161895] = true, -- Thing From Beyond (40+ Corruption)
 	},
 }
 
@@ -376,8 +354,8 @@ function autoAoe:Update()
 		return
 	end
 	Player.enemies = count
-	for i = #Player.target_modes[Player.spec], 1, -1 do
-		if count >= Player.target_modes[Player.spec][i][1] then
+	for i = #Player.target_modes, 1, -1 do
+		if count >= Player.target_modes[i][1] then
 			Player:SetTargetMode(i)
 			Player.enemies = count
 			return
@@ -414,38 +392,46 @@ local abilities = {
 	all = {}
 }
 
-function Ability:Add(spellId, buff, player, spellId2)
+function Ability:Add(spellId, buff, player)
 	local ability = {
 		spellIds = type(spellId) == 'table' and spellId or { spellId },
 		spellId = 0,
-		spellId2 = spellId2,
 		name = false,
 		icon = false,
 		requires_charge = false,
+		triggers_combat = false,
 		triggers_gcd = true,
 		hasted_duration = false,
 		hasted_cooldown = false,
 		hasted_ticks = false,
 		known = false,
+		health_cost = 0,
 		mana_cost = 0,
-		power_cost = 0,
 		cooldown_duration = 0,
 		buff_duration = 0,
 		tick_interval = 0,
-		max_range = 40,
+		max_range = 30,
 		velocity = 0,
 		last_used = 0,
 		auraTarget = buff and 'player' or 'target',
 		auraFilter = (buff and 'HELPFUL' or 'HARMFUL') .. (player and '|PLAYER' or '')
 	}
-	setmetatable(ability, Ability)
+	setmetatable(ability, self)
 	abilities.all[#abilities.all + 1] = ability
 	return ability
 end
 
 function Ability:Match(spell)
 	if type(spell) == 'number' then
-		return spell == self.spellId or (self.spellId2 and spell == self.spellId2)
+		if spell == self.spellId then
+			return true
+		end
+		local _, id
+		for _, id in next, self.spellIds do
+			if spell == id then
+				return true
+			end
+		end
 	elseif type(spell) == 'string' then
 		return spell:lower() == self.name:lower()
 	elseif type(spell) == 'table' then
@@ -458,29 +444,26 @@ function Ability:Ready(seconds)
 	return self:Cooldown() <= (seconds or 0)
 end
 
-function Ability:Usable()
+function Ability:Usable(seconds)
 	if not self.known then
 		return false
 	end
-	if self:ManaCost() > Player.mana then
-		return false
-	end
-	if self:HolyPowerCost() > Player.holy_power then
+	if self:Cost() > Player.mana then
 		return false
 	end
 	if self.requires_charge and self:Charges() == 0 then
 		return false
 	end
-	return self:Ready()
+	return self:Ready(seconds)
 end
 
-function Ability:Remains()
-	if self:Casting() or self:Traveling() then
+function Ability:Remains(mine)
+	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
 	local _, i, id, expires
 	for i = 1, 40 do
-		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
+		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter .. (mine and '|PLAYER' or ''))
 		if not id then
 			return 0
 		elseif self:Match(id) then
@@ -493,38 +476,37 @@ function Ability:Remains()
 	return 0
 end
 
-function Ability:Refreshable()
-	if self.buff_duration > 0 then
-		return self:Remains() < self:Duration() * 0.3
-	end
-	return self:Down()
+function Ability:Up(condition)
+	return self:Remains(condition) > 0
 end
 
-function Ability:Up()
-	return self:Remains() > 0
-end
-
-function Ability:Down()
-	return not self:Up()
+function Ability:Down(condition)
+	return self:Remains(condition) <= 0
 end
 
 function Ability:SetVelocity(velocity)
 	if velocity > 0 then
 		self.velocity = velocity
-		self.travel_start = {}
+		self.traveling = {}
 	else
-		self.travel_start = nil
+		self.traveling = nil
 		self.velocity = 0
 	end
 end
 
-function Ability:Traveling()
-	if self.travel_start and self.travel_start[Target.guid] then
-		if Player.time - self.travel_start[Target.guid] < self.max_range / self.velocity then
-			return true
-		end
-		self.travel_start[Target.guid] = nil
+function Ability:Traveling(all)
+	if not self.traveling then
+		return 0
 	end
+	local count, cast, _ = 0
+	for _, cast in next, self.traveling do
+		if all or cast.dstGUID == Target.guid then
+			if Player.time - cast.start < self.max_range / self.velocity then
+				count = count + 1
+			end
+		end
+	end
+	return count
 end
 
 function Ability:TravelTime()
@@ -532,16 +514,27 @@ function Ability:TravelTime()
 end
 
 function Ability:Ticking()
+	local count, ticking, _ = 0, {}
 	if self.aura_targets then
-		local count, guid, aura = 0
+		local guid, aura
 		for guid, aura in next, self.aura_targets do
 			if aura.expires - Player.time > Player.execute_remains then
-				count = count + 1
+				ticking[guid] = true
 			end
 		end
-		return count
 	end
-	return self:Up() and 1 or 0
+	if self.traveling then
+		local cast
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				ticking[cast.dstGUID] = true
+			end
+		end
+	end
+	for _ in next, ticking do
+		count = count + 1
+	end
+	return count
 end
 
 function Ability:TickTime()
@@ -576,28 +569,36 @@ function Ability:Stack()
 	return 0
 end
 
-function Ability:ManaCost()
-	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana_max) or 0
-end
-
-function Ability:HolyPowerCost()
-	return self.power_cost
-end
-
-function Ability:Charges()
-	return (GetSpellCharges(self.spellId)) or 0
+function Ability:Cost()
+	return self.mana_cost
 end
 
 function Ability:ChargesFractional()
 	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	if self:Casting() then
+		if charges >= max_charges then
+			return charges - 1
+		end
+		charges = charges - 1
+	end
 	if charges >= max_charges then
 		return charges
 	end
 	return charges + ((max(0, Player.ctime - recharge_start + Player.execute_remains)) / recharge_time)
 end
 
+function Ability:Charges()
+	return floor(self:ChargesFractional())
+end
+
 function Ability:FullRechargeTime()
 	local charges, max_charges, recharge_start, recharge_time = GetSpellCharges(self.spellId)
+	if self:Casting() then
+		if charges >= max_charges then
+			return recharge_time
+		end
+		charges = charges - 1
+	end
 	if charges >= max_charges then
 		return 0
 	end
@@ -629,6 +630,10 @@ function Ability:CastTime()
 	return castTime / 1000
 end
 
+function Ability:CastRegen()
+	return Player.mana_regen * self:CastTime() - self:Cost()
+end
+
 function Ability:Previous(n)
 	local i = n or 1
 	if Player.ability_casting then
@@ -640,14 +645,11 @@ function Ability:Previous(n)
 	return Player.previous_gcd[i] == self
 end
 
-function Ability:AzeriteRank()
-	return Azerite.traits[self.spellId] or 0
-end
-
 function Ability:AutoAoe(removeUnaffected, trigger)
 	self.auto_aoe = {
 		remove = removeUnaffected,
-		targets = {}
+		targets = {},
+		target_count = 0,
 	}
 	if trigger == 'periodic' then
 		self.auto_aoe.trigger = 'SPELL_PERIODIC_DAMAGE'
@@ -671,16 +673,60 @@ function Ability:UpdateTargetsHit()
 		if self.auto_aoe.remove then
 			autoAoe:Clear()
 		end
+		self.auto_aoe.target_count = 0
 		local guid
 		for guid in next, self.auto_aoe.targets do
 			autoAoe:Add(guid)
 			self.auto_aoe.targets[guid] = nil
+			self.auto_aoe.target_count = self.auto_aoe.target_count + 1
 		end
 		autoAoe:Update()
 	end
 end
 
--- start DoT tracking
+function Ability:Targets()
+	if self.auto_aoe and self:Up() then
+		return self.auto_aoe.target_count
+	end
+	return 0
+end
+
+function Ability:CastSuccess(dstGUID, timeStamp)
+	self.last_used = timeStamp
+	Player.last_ability = self
+	if self.triggers_gcd then
+		Player.previous_gcd[10] = nil
+		table.insert(Player.previous_gcd, 1, self)
+	end
+	if self.traveling and self.next_castGUID then
+		self.traveling[self.next_castGUID] = {
+			guid = self.next_castGUID,
+			start = self.last_used,
+			dstGUID = dstGUID,
+		}
+		self.next_castGUID = nil
+	end
+end
+
+function Ability:CastLanded(dstGUID, timeStamp, eventType)
+	if not self.traveling then
+		return
+	end
+	local guid, cast, oldest
+	for guid, cast in next, self.traveling do
+		if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
+			self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
+		elseif cast.dstGUID == dstGUID and (not oldest or cast.start < oldest.start) then
+			oldest = cast
+		end
+	end
+	if oldest then
+		Target.estimated_range = min(self.max_range, floor(self.velocity * max(0, timeStamp - oldest.start)))
+		self.traveling[oldest.guid] = nil
+	end
+end
+
+-- Start DoT Tracking
 
 local trackAuras = {}
 
@@ -729,63 +775,16 @@ function Ability:RefreshAura(guid)
 	aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
 end
 
-function Ability:RefreshAuraAll()
-	local guid, aura, remains
-	local duration = self:Duration()
-	for guid, aura in next, self.aura_targets do
-		aura.expires = Player.time + min(duration * 1.3, (aura.expires - Player.time) + duration)
-	end
-end
-
 function Ability:RemoveAura(guid)
 	if self.aura_targets[guid] then
 		self.aura_targets[guid] = nil
 	end
 end
 
--- end DoT tracking
+-- End DoT Tracking
 
 -- Paladin Abilities
----- Multiple Specializations
-local AvengingWrath = Ability:Add(31884, true, true)
-AvengingWrath.buff_duration = 20
-AvengingWrath.cooldown_duration = 120
-AvengingWrath.autocrit = Ability:Add(294027, true, true)
-AvengingWrath.autocrit.buff_duration = 20
-local BlessingOfProtection = Ability:Add(1022, true, false)
-BlessingOfProtection.buff_duration = 10
-BlessingOfProtection.cooldown_duration = 300
-local CrusaderAura = Ability:Add(32223, true, false)
-local DevotionAura = Ability:Add(465, true, false)
-local DivineShield = Ability:Add(642, true, true)
-DivineShield.buff_duration = 8
-DivineShield.cooldown_duration = 300
-local FlashOfLight = Ability:Add(19750, true, true)
-FlashOfLight.mana_cost = 22
-local Forbearance = Ability:Add(25771, false, false)
-Forbearance.buff_duration = 30
-Forbearance.auraTarget = 'player'
-local HammerOfJustice = Ability:Add(853, false, true)
-HammerOfJustice.buff_duration = 6
-HammerOfJustice.cooldown_duration = 60
-local BlessingOfFreedom = Ability:Add(1044, true, false)
-BlessingOfFreedom.buff_duration = 8
-BlessingOfFreedom.cooldown_duration = 25
-BlessingOfFreedom.mana_cost = 7
-local HandOfReckoning = Ability:Add(62124, false, true)
-HandOfReckoning.buff_duration = 4
-HandOfReckoning.cooldown_duration = 8
-local LayOnHands = Ability:Add(633, true, true)
-LayOnHands.cooldown_duration = 600
-local Rebuke = Ability:Add(96231, false, true)
-Rebuke.buff_duration = 4
-Rebuke.cooldown_duration = 15
-local RetributionAura = Ability:Add(183435, true, false)
-local WordOfGlory = Ability:Add(85673, true, true)
-WordOfGlory.power_cost = 3
------- Talents
-
------- Procs
+---- General
 
 ---- Holy
 
@@ -794,233 +793,21 @@ WordOfGlory.power_cost = 3
 ------ Procs
 
 ---- Protection
-local AvengersShield = Ability:Add(31935, false, true)
-AvengersShield.buff_duration = 3
-AvengersShield.cooldown_duration = 15
-AvengersShield.hasted_cooldown = true
-AvengersShield:SetVelocity(35)
-AvengersShield:AutoAoe()
-local Consecration = Ability:Add(26573, true, true, 188370)
-Consecration.buff_duration = 12
-Consecration.cooldown_duration = 4.5
-Consecration.hasted_cooldown = true
-Consecration.dot = Ability:Add(204242, false, true, 81297)
-Consecration.dot.buff_duration = 12
-Consecration.dot.tick_interval = 1
-Consecration.dot.hasted_ticks = true
-Consecration.dot:AutoAoe()
-local HammerOfTheRighteous = Ability:Add(53595, false, true)
-HammerOfTheRighteous.cooldown_duration = 4.5
-HammerOfTheRighteous.requires_charge = true
-HammerOfTheRighteous:AutoAoe()
-local JudgmentProt = Ability:Add(275779, false, true, 197277)
-JudgmentProt.buff_duration = 15
-JudgmentProt.cooldown_duration = 6
-JudgmentProt.mana_cost = 3
-JudgmentProt.max_range = 30
-JudgmentProt.hasted_cooldown = true
-JudgmentProt.requires_charge = true
-JudgmentProt:SetVelocity(35)
-local Seraphim = Ability:Add(152262, true, true)
-Seraphim.buff_duration = 8
-Seraphim.cooldown_duration = 45
-local ShieldOfTheRighteous = Ability:Add(53600, false, true)
-ShieldOfTheRighteous.power_cost = 3
-ShieldOfTheRighteous.triggers_gcd = false
-ShieldOfTheRighteous:AutoAoe()
-ShieldOfTheRighteous.buff = Ability:Add(132403, true, true)
-ShieldOfTheRighteous.buff.buff_duration = 4.5
+
 ------ Talents
-local BlessedHammer = Ability:Add(204019, false, true)
-BlessedHammer.buff_duration = 5
-BlessedHammer.cooldown_duration = 4.5
-BlessedHammer.requires_charge = true
-BlessedHammer:AutoAoe()
-local CrusadersJudgment = Ability:Add(204023, true, true)
------- Procs
-local ShiningLight = Ability:Add(321136, true, true, 182104)
-ShiningLight.buff_duration = 15
-ShiningLight.free = Ability:Add(327510, true, true)
-ShiningLight.free.buff_duration = 15
----- Retribution
-local BladeOfJustice = Ability:Add(184575, false, true)
-BladeOfJustice.cooldown_duration = 10.5
-BladeOfJustice.hasted_cooldown = true
-local CrusaderStrike = Ability:Add(35395, false, true)
-CrusaderStrike.cooldown_duration = 6
-CrusaderStrike.hasted_cooldown = true
-CrusaderStrike.requires_charge = true
-local DivineStorm = Ability:Add(53385, false, true)
-DivineStorm.power_cost = 3
-DivineStorm:AutoAoe(true)
-local Judgment = Ability:Add(20271, false, true, 197277)
-Judgment.buff_duration = 15
-Judgment.cooldown_duration = 12
-Judgment.max_range = 30
-Judgment.hasted_cooldown = true
-Judgment:SetVelocity(35)
-local ShieldOfVengeance = Ability:Add(184662, true, true)
-ShieldOfVengeance.buff_duration = 15
-ShieldOfVengeance.cooldown_duration = 120
-local TemplarsVerdict = Ability:Add(85256, false, true, 224266)
-TemplarsVerdict.power_cost = 3
------- Talents
-local ConsecrationRet = Ability:Add(205228, false, true, 81297)
-ConsecrationRet.buff_duration = 6
-ConsecrationRet.cooldown_duration = 20
-ConsecrationRet.tick_interval = 1
-ConsecrationRet.hasted_ticks = true
-ConsecrationRet:AutoAoe()
-local Crusade = Ability:Add(231895, true, true)
-Crusade.buff_duration = 30
-Crusade.cooldown_duration = 120
-Crusade.requires_charge = true
-local DivinePurpose = Ability:Add(223817, true, true, 223819)
-DivinePurpose.buff_duration = 12
-local EmpyreanPower = Ability:Add(326732, true, true, 326733)
-EmpyreanPower.buff_duration = 15
-local ExecutionSentence = Ability:Add(267798, false, true, 267799)
-ExecutionSentence.buff_duration = 12
-ExecutionSentence.cooldown_duration = 30
-ExecutionSentence.power_cost = 3
-local EyeForAnEye = Ability:Add(205191, true, true)
-EyeForAnEye.buff_duration = 10
-EyeForAnEye.cooldown_duration = 60
-local FiresOfJustice = Ability:Add(203316, true, true, 209785)
-FiresOfJustice.buff_duration = 15
-local Inquisition = Ability:Add(84963, true, true)
-Inquisition.buff_duration = 15
-Inquisition.power_cost = 1
-local HammerOfWrath = Ability:Add(24275, false, true)
-HammerOfWrath.cooldown_duration = 7.5
-HammerOfWrath.hasted_cooldown = true
-HammerOfWrath.max_range = 30
-HammerOfWrath:SetVelocity(40)
-HammerOfWrath.rank_2 = Ability:Add(326730, false, true)
-local SelflessHealer = Ability:Add(85804, true, true, 114250)
-SelflessHealer.buff_duration = 15
-local WakeOfAshes = Ability:Add(255937, false, true)
-WakeOfAshes.buff_duration = 5
-WakeOfAshes.cooldown_duration = 45
-WakeOfAshes:AutoAoe()
-local RighteousVerdict = Ability:Add(267610, true, true, 267611)
-RighteousVerdict.buff_duration = 6
+
 ------ Procs
 
--- Azerite Traits
-local EmpyreanPowerAzerite = Ability:Add(286390, true, true, 286393)
-EmpyreanPowerAzerite.buff_duration = 15
-local LightsDecree = Ability:Add(286229, false, true, 286232)
-LightsDecree:AutoAoe()
--- Heart of Azeroth
----- Major Essences
-local AnimaOfDeath = Ability:Add({294926, 300002, 300003}, false, true)
-AnimaOfDeath.cooldown_duration = 120
-AnimaOfDeath.essence_id = 24
-AnimaOfDeath.essence_major = true
-local BloodOfTheEnemy = Ability:Add({297108, 298273, 298277} , false, true)
-BloodOfTheEnemy.buff_duration = 10
-BloodOfTheEnemy.cooldown_duration = 120
-BloodOfTheEnemy.essence_id = 23
-BloodOfTheEnemy.essence_major = true
-BloodOfTheEnemy:AutoAoe(true)
-BloodOfTheEnemy.buff = Ability:Add(297126, true, true) -- Seething Rage
-BloodOfTheEnemy.buff.buff_duration = 5
-BloodOfTheEnemy.buff.essence_id = 23
-local ConcentratedFlame = Ability:Add({295373, 299349, 299353}, true, true, 295378)
-ConcentratedFlame.buff_duration = 180
-ConcentratedFlame.cooldown_duration = 30
-ConcentratedFlame.requires_charge = true
-ConcentratedFlame.essence_id = 12
-ConcentratedFlame.essence_major = true
-ConcentratedFlame:SetVelocity(40)
-ConcentratedFlame.dot = Ability:Add(295368, false, true)
-ConcentratedFlame.dot.buff_duration = 6
-ConcentratedFlame.dot.tick_interval = 2
-ConcentratedFlame.dot.essence_id = 12
-ConcentratedFlame.dot.essence_major = true
-local GuardianOfAzeroth = Ability:Add({295840, 299355, 299358}, false, true)
-GuardianOfAzeroth.cooldown_duration = 180
-GuardianOfAzeroth.essence_id = 14
-GuardianOfAzeroth.essence_major = true
-local FocusedAzeriteBeam = Ability:Add({295258, 299336, 299338}, false, true)
-FocusedAzeriteBeam.cooldown_duration = 90
-FocusedAzeriteBeam.essence_id = 5
-FocusedAzeriteBeam.essence_major = true
-FocusedAzeriteBeam:AutoAoe()
-local MemoryOfLucidDreams = Ability:Add({298357, 299372, 299374}, true, true)
-MemoryOfLucidDreams.buff_duration = 15
-MemoryOfLucidDreams.cooldown_duration = 120
-MemoryOfLucidDreams.essence_id = 27
-MemoryOfLucidDreams.essence_major = true
-local PurifyingBlast = Ability:Add({295337, 299345, 299347}, false, true, 295338)
-PurifyingBlast.cooldown_duration = 60
-PurifyingBlast.essence_id = 6
-PurifyingBlast.essence_major = true
-PurifyingBlast:AutoAoe(true)
-local ReapingFlames = Ability:Add({310690, 311194, 311195}, false, true)
-ReapingFlames.cooldown_duration = 45
-ReapingFlames.essence_id = 35
-ReapingFlames.essence_major = true
-local RippleInSpace = Ability:Add({302731, 302982, 302983}, true, true)
-RippleInSpace.buff_duration = 2
-RippleInSpace.cooldown_duration = 60
-RippleInSpace.essence_id = 15
-RippleInSpace.essence_major = true
-local TheUnboundForce = Ability:Add({298452, 299376,299378}, false, true)
-TheUnboundForce.cooldown_duration = 45
-TheUnboundForce.essence_id = 28
-TheUnboundForce.essence_major = true
-local VigilantProtector = Ability:Add({310592, 310601, 310602}, false, true)
-VigilantProtector.cooldown_duration = 120
-VigilantProtector.essence_id = 34
-VigilantProtector.essence_major = true
-local VisionOfPerfection = Ability:Add({296325, 299368, 299370}, true, true, 303345)
-VisionOfPerfection.buff_duration = 10
-VisionOfPerfection.essence_id = 22
-VisionOfPerfection.essence_major = true
-local WorldveinResonance = Ability:Add({295186, 298628, 299334}, true, true)
-WorldveinResonance.cooldown_duration = 60
-WorldveinResonance.essence_id = 4
-WorldveinResonance.essence_major = true
----- Minor Essences
-local AncientFlame = Ability:Add(295367, false, true)
-AncientFlame.buff_duration = 10
-AncientFlame.essence_id = 12
-local CondensedLifeForce = Ability:Add(295367, false, true)
-CondensedLifeForce.essence_id = 14
-local FocusedEnergy = Ability:Add(295248, true, true)
-FocusedEnergy.buff_duration = 4
-FocusedEnergy.essence_id = 5
-local Lifeblood = Ability:Add(295137, true, true)
-Lifeblood.essence_id = 4
-local LucidDreams = Ability:Add(298343, true, true)
-LucidDreams.buff_duration = 8
-LucidDreams.essence_id = 27
-local PurificationProtocol = Ability:Add(295305, false, true)
-PurificationProtocol.essence_id = 6
-PurificationProtocol:AutoAoe()
-local RealityShift = Ability:Add(302952, true, true)
-RealityShift.buff_duration = 20
-RealityShift.cooldown_duration = 30
-RealityShift.essence_id = 15
-local RecklessForce = Ability:Add(302932, true, true)
-RecklessForce.buff_duration = 3
-RecklessForce.essence_id = 28
-RecklessForce.counter = Ability:Add(302917, true, true)
-RecklessForce.counter.essence_id = 28
-local StriveForPerfection = Ability:Add(299369, true, true)
-StriveForPerfection.essence_id = 22
--- PvP talents
-local DivinePunisher = Ability:Add(204914, true, true, 216762)
-local HammerOfReckoning = Ability:Add(247675, true, true, 247677)
-HammerOfReckoning.buff_duration = 30
-HammerOfReckoning.cooldown_duration = 60
+---- Retribution
+
+------ Talents
+
+------ Procs
+
 -- Racials
-local LightsJudgment = Ability:Add(255647, false, true)
-LightsJudgment.buff_duration = 3
-LightsJudgment.cooldown_duration = 150
-LightsJudgment:AutoAoe()
+
+-- Class Debuffs
+
 -- Trinket Effects
 
 -- End Abilities
@@ -1088,139 +875,38 @@ function InventoryItem:Usable(seconds)
 end
 
 -- Inventory Items
-local GreaterFlaskOfTheUndertow = InventoryItem:Add(168654)
-GreaterFlaskOfTheUndertow.buff = Ability:Add(298841, true, true)
-local LightningForgedAugmentRune = InventoryItem:Add(174906)
-LightningForgedAugmentRune.buff = Ability:Add(317065, true, true)
-local PotionOfUnbridledFury = InventoryItem:Add(169299)
-PotionOfUnbridledFury.buff = Ability:Add(300714, true, true)
-PotionOfUnbridledFury.buff.triggers_gcd = false
+
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 -- End Inventory Items
 
--- Start Azerite Trait API
-
-Azerite.equip_slots = { 1, 3, 5 } -- Head, Shoulder, Chest
-
-function Azerite:Init()
-	self.locations = {}
-	self.traits = {}
-	self.essences = {}
-	local i
-	for i = 1, #self.equip_slots do
-		self.locations[i] = ItemLocation:CreateFromEquipmentSlot(self.equip_slots[i])
-	end
-end
-
-function Azerite:Update()
-	local _, loc, slot, pid, pinfo
-	for pid in next, self.traits do
-		self.traits[pid] = nil
-	end
-	for pid in next, self.essences do
-		self.essences[pid] = nil
-	end
-	for _, loc in next, self.locations do
-		if GetInventoryItemID('player', loc:GetEquipmentSlot()) and C_AzeriteEmpoweredItem.IsAzeriteEmpoweredItem(loc) then
-			for _, slot in next, C_AzeriteEmpoweredItem.GetAllTierInfo(loc) do
-				if slot.azeritePowerIDs then
-					for _, pid in next, slot.azeritePowerIDs do
-						if C_AzeriteEmpoweredItem.IsPowerSelected(loc, pid) then
-							self.traits[pid] = 1 + (self.traits[pid] or 0)
-							pinfo = C_AzeriteEmpoweredItem.GetPowerInfo(pid)
-							if pinfo and pinfo.spellID then
-								--print('Azerite found:', pinfo.azeritePowerID, GetSpellInfo(pinfo.spellID))
-								self.traits[pinfo.spellID] = self.traits[pid]
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-	for _, loc in next, C_AzeriteEssence.GetMilestones() or {} do
-		if loc.slot then
-			pid = C_AzeriteEssence.GetMilestoneEssence(loc.ID)
-			if pid then
-				pinfo = C_AzeriteEssence.GetEssenceInfo(pid)
-				self.essences[pid] = {
-					id = pid,
-					rank = pinfo.rank,
-					major = loc.slot == 0,
-				}
-			end
-		end
-	end
-end
-
--- End Azerite Trait API
-
 -- Start Player API
 
-function Player:Health()
-	return self.health
-end
-
-function Player:HealthMax()
-	return self.health_max
+function Player:Enemies()
+	return self.enemies
 end
 
 function Player:HealthPct()
 	return self.health / self.health_max * 100
 end
 
-function Player:HolyPower()
-	return self.holy_power
+function Player:ManaPct()
+	return self.mana / self.mana_max * 100
 end
 
 function Player:UnderAttack()
-	return (Player.time - self.last_swing_taken) < 3
+	return self.threat >= 3 or (self.time - self.last_swing_taken) < 3
 end
 
 function Player:TimeInCombat()
 	if self.combat_start > 0 then
 		return self.time - self.combat_start
 	end
+	if self.ability_casting and self.ability_casting.triggers_combat then
+		return 0.1
+	end
 	return 0
-end
-
-function Player:BloodlustActive()
-	local _, i, id
-	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HELPFUL')
-		if not id then
-			return false
-		elseif (
-			id == 2825 or   -- Bloodlust (Horde Shaman)
-			id == 32182 or  -- Heroism (Alliance Shaman)
-			id == 80353 or  -- Time Warp (Mage)
-			id == 90355 or  -- Ancient Hysteria (Hunter Pet - Core Hound)
-			id == 160452 or -- Netherwinds (Hunter Pet - Nether Ray)
-			id == 264667 or -- Primal Rage (Hunter Pet - Ferocity)
-			id == 178207 or -- Drums of Fury (Leatherworking)
-			id == 146555 or -- Drums of Rage (Leatherworking)
-			id == 230935 or -- Drums of the Mountain (Leatherworking)
-			id == 256740    -- Drums of the Maelstrom (Leatherworking)
-		) then
-			return true
-		end
-	end
-end
-
-function Player:Dazed()
-	local _, i, id
-	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HARMFUL')
-		if not id then
-			return false
-		elseif (
-			id == 1604 -- Dazed (hit from behind)
-		) then
-			return true
-		end
-	end
 end
 
 function Player:Equipped(itemID, slot)
@@ -1236,43 +922,34 @@ function Player:Equipped(itemID, slot)
 	return false
 end
 
-function Player:InArenaOrBattleground()
-	return self.instance == 'arena' or self.instance == 'pvp'
-end
-
 function Player:UpdateAbilities()
-	Player.mana_max = UnitPowerMax('player', 0)
-	Player.holy_power_max = UnitPowerMax('player', 9)
+	local int = UnitStat('player', 4)
+	Player.mana_base = Player.mana_max - min(20, int) + 15 * (int - min(20, int))
 
-	local _, ability, spellId
-
+	local _, i, ability, spellId, cost
+	-- Update spell ranks first
 	for _, ability in next, abilities.all do
 		ability.known = false
-		for _, spellId in next, ability.spellIds do
-			ability.spellId, ability.name, _, ability.icon = spellId, GetSpellInfo(spellId)
-			if IsPlayerSpell(spellId) or Azerite.traits[spellId] then
+		ability.spellId = ability.spellIds[1]
+		for i, spellId in next, ability.spellIds do
+			if IsPlayerSpell(spellId) then
+				ability.spellId = spellId -- update spellId to current rank
 				ability.known = true
-				break
+				if ability.mana_costs then
+					ability.mana_cost = ability.mana_costs[i] -- update mana_cost to current rank
+				end
+				if ability.mana_cost_pct then
+					ability.mana_cost = floor(Player.mana_base * (ability.mana_cost_pct / 100))
+				end
+				if ability.health_costs then
+					ability.health_cost = ability.health_costs[i] -- update health_cost to current rank
+				end
 			end
 		end
-		if C_LevelLink.IsSpellLocked(ability.spellId) then
-			ability.known = false -- spell is locked, do not mark as known
-		elseif ability.essence_id and Azerite.essences[ability.essence_id] then
-			if ability.essence_major then
-				ability.known = Azerite.essences[ability.essence_id].major
-			else
-				ability.known = true
-			end
-		end
+		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
-
-	if Crusade.known then
-		AvengingWrath.known = false
-	end
-	AvengingWrath.autocrit.known = AvengingWrath.known
-	Consecration.dot.known = Consecration.known
-	ShieldOfTheRighteous.buff.known = ShieldOfTheRighteous.known
-	ShiningLight.free.known = ShiningLight.known
+	
+	-- Mark specific spells as known if they can be triggered by others
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1281,9 +958,6 @@ function Player:UpdateAbilities()
 	for _, ability in next, abilities.all do
 		if ability.known then
 			abilities.bySpellId[ability.spellId] = ability
-			if ability.spellId2 then
-				abilities.bySpellId[ability.spellId2] = ability
-			end
 			if ability.velocity > 0 then
 				abilities.velocity[#abilities.velocity + 1] = ability
 			end
@@ -1297,6 +971,45 @@ function Player:UpdateAbilities()
 	end
 end
 
+function Player:Update()
+	local _, start, duration, remains, spellId, speed, max_speed
+	self.ctime = GetTime()
+	self.time = self.ctime - self.time_diff
+	self.main =  nil
+	self.cd = nil
+	self.interrupt = nil
+	self.extra = nil
+	start, duration = GetSpellCooldown(47524)
+	self.gcd_remains = start > 0 and duration - (self.ctime - start) or 0
+	_, _, _, _, remains, _, _, spellId = UnitCastingInfo('player')
+	self.ability_casting = abilities.bySpellId[spellId]
+	self.execute_remains = max(remains and (remains / 1000 - self.ctime) or 0, self.gcd_remains)
+	self.haste_factor = 1 / (1 + GetCombatRatingBonus(CR_HASTE_SPELL) / 100)
+	self.gcd = 1.5 * self.haste_factor
+	self.health = UnitHealth('player')
+	self.health_max = UnitHealthMax('player')
+	self.mana_regen = GetPowerRegen()
+	self.mana = UnitPower('player', 0) + (self.mana_regen * self.execute_remains)
+	self.mana_max = UnitPowerMax('player', 0)
+	if self.ability_casting then
+		self.mana = self.mana - self.ability_casting:Cost()
+	end
+	self.mana = min(max(self.mana, 0), self.mana_max)
+	speed, max_speed = GetUnitSpeed('player')
+	self.moving = speed ~= 0
+	self.movement_speed = max_speed / 7 * 100
+	self.threat = UnitThreatSituation('player', 'target') or 0
+
+	trackAuras:Purge()
+	if Opt.auto_aoe then
+		local ability
+		for _, ability in next, abilities.autoAoe do
+			ability:UpdateTargetsHit()
+		end
+		autoAoe:Purge()
+	end
+end
+
 -- End Player API
 
 -- Start Target API
@@ -1305,31 +1018,29 @@ function Target:UpdateHealth()
 	timer.health = 0
 	self.health = UnitHealth('target')
 	self.health_max = UnitHealthMax('target')
-	table.remove(self.healthArray, 1)
-	self.healthArray[25] = self.health
-	self.timeToDieMax = self.health / Player.health_max * 15
+	table.remove(self.health_array, 1)
+	self.health_array[25] = self.health
+	self.timeToDieMax = self.health / Player.health_max * 10
 	self.healthPercentage = self.health_max > 0 and (self.health / self.health_max * 100) or 100
-	self.healthLostPerSec = (self.healthArray[1] - self.health) / 5
+	self.healthLostPerSec = (self.health_array[1] - self.health) / 5
 	self.timeToDie = self.healthLostPerSec > 0 and min(self.timeToDieMax, self.health / self.healthLostPerSec) or self.timeToDieMax
 end
 
 function Target:Update()
 	UI:Disappear()
-	if UI:ShouldHide() then
-		return
-	end
 	local guid = UnitGUID('target')
 	if not guid then
 		self.guid = nil
 		self.boss = false
 		self.stunnable = true
 		self.classification = 'normal'
+		self.type = 'Humanoid'
 		self.player = false
-		self.level = UnitLevel('player')
+		self.level = Player.level
 		self.hostile = true
 		local i
 		for i = 1, 25 do
-			self.healthArray[i] = 0
+			self.health_array[i] = 0
 		end
 		self:UpdateHealth()
 		if Opt.always_on then
@@ -1346,18 +1057,19 @@ function Target:Update()
 		self.guid = guid
 		local i
 		for i = 1, 25 do
-			self.healthArray[i] = UnitHealth('target')
+			self.health_array[i] = UnitHealth('target')
 		end
 	end
 	self.boss = false
 	self.stunnable = true
 	self.classification = UnitClassification('target')
+	self.type = UnitCreatureType('target')
 	self.player = UnitIsPlayer('target')
 	self.level = UnitLevel('target')
 	self.hostile = UnitCanAttack('player', 'target') and not UnitIsDead('target')
 	self:UpdateHealth()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
-		if self.level == -1 or (Player.instance == 'party' and self.level >= UnitLevel('player') + 3) then
+		if self.level == -1 or (Player.instance == 'party' and self.level >= Player.level + 2) then
 			self.boss = true
 			self.stunnable = false
 		elseif Player.instance == 'raid' or (self.health_max > Player.health_max * 10) then
@@ -1375,87 +1087,6 @@ end
 
 -- Start Ability Modifications
 
-function Ability:HolyPowerCost()
-	if DivinePurpose.known and DivinePurpose:Up() then
-		return 0
-	end
-	local cost = self.power_cost
-	if cost > 0 and FiresOfJustice.known and FiresOfJustice:Up() then
-		cost = cost - 1
-	end
-	return cost
-end
-
-function WordOfGlory:HolyPowerCost()
-	if ShiningLight.known and ShiningLight.free:Up() then
-		return 0
-	end
-	return Ability.HolyPowerCost(self)
-end
-
-function ConcentratedFlame.dot:Remains()
-	if ConcentratedFlame:Traveling() then
-		return self:Duration()
-	end
-	return Ability.Remains(self)
-end
-
-function HammerOfJustice:Usable()
-	if not Target.stunnable then
-		return false
-	end
-	return Ability.Usable(self)
-end
-
-function Consecration:Remains()
-	if Ability.Remains(self) <= 0 then
-		return 0
-	end
-	return min(self.buff_duration, max(0, self.buff_duration - (Player.time - self.last_used) - Player.execute_remains))
-end
-ConsecrationRet.Remains = Consecration.Remains
-
-function Inquisition:HolyPowerCost()
-	return min(3, max(1, Player.holy_power))
-end
-
-function HammerOfWrath:Usable()
-	if Target.healthPercentage >= 20 and (not HammerOfWrath.rank_2.known or (AvengingWrath:Down() and Crusade:Down())) then
-		return false
-	end
-	return Ability.Usable(self)
-end
-
-function DivineStorm:HolyPowerCost()
-	if (EmpyreanPower.known and EmpyreanPower:Up()) or (EmpyreanPowerAzerite.known and EmpyreanPowerAzerite:Up()) then
-		return 0
-	end
-	return Ability.HolyPowerCost(self)
-end
-
-function DivineShield:Usable()
-	if Forbearance:Up() then
-		return false
-	end
-	return Ability.Usable(self)
-end
-LayOnHands.Usable = DivineShield.Usable
-BlessingOfProtection.Usable = DivineShield.Usable
-
-function DivinePunisher:Remains()
-	if self.target and self.target == Target.guid then
-		return 60
-	end
-	return 0
-end
-
-function HammerOfReckoning:Usable()
-	if self:Stack() < 50 or Player.aw_remains > 0 or Player.crusade_remains > 0 then
-		return false
-	end
-	return Ability.Usable(self)
-end
-
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1472,401 +1103,16 @@ end
 
 -- Begin Action Priority Lists
 
-local APL = {
-	[SPEC.NONE] = {
-		main = function() end
-	},
-	[SPEC.HOLY] = {},
-	[SPEC.PROTECTION] = {},
-	[SPEC.RETRIBUTION] = {},
-}
+local APL = {}
 
-APL[SPEC.HOLY].main = function(self)
-
-end
-
-APL[SPEC.PROTECTION].main = function(self)
-	if Opt.defensives then
-		if Player:HealthPct() < 75 then
-			if LayOnHands:Usable() and Player:HealthPct() < 20 then
-				UseExtra(LayOnHands)
-			elseif DivineShield:Usable() and Player:HealthPct() < 20 then
-				UseExtra(DivineShield)
-			elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
-				UseExtra(BlessingOfProtection)
-			end
-		end
-		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() and not Player:Dazed() then
-			UseExtra(BlessingOfFreedom)
-		end
-	end
-	if Opt.auras and not Player.aura then
-		if DevotionAura:Usable() and DevotionAura:Down() then
-			UseExtra(DevotionAura)
-		elseif RetributionAura:Usable() and RetributionAura:Down() then
-			UseExtra(RetributionAura)
-		elseif CrusaderAura:Usable() and CrusaderAura:Down() then
-			UseExtra(CrusaderAura)
-		end
-	end
+APL.Main = function(self)
 	if Player:TimeInCombat() == 0 then
---[[
-actions.precombat=flask
-actions.precombat+=/food
-actions.precombat+=/augmentation
-# Snapshot raid buffed stats before combat begins and pre-potting is done.
-actions.precombat+=/snapshot_stats
-actions.precombat+=/potion
-actions.precombat+=/consecration
-actions.precombat+=/lights_judgment
-]]
-		if not Player:InArenaOrBattleground() then
-			if Opt.pot and GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheUndertow)
-			end
-			if LightningForgedAugmentRune:Usable() and LightningForgedAugmentRune.buff:Remains() < 300 then
-				UseCooldown(LightningForgedAugmentRune)
-			end
-			if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() then
-				UseCooldown(PotionOfUnbridledFury)
-			end
-		end
-		if AvengersShield:Usable() then
-			return AvengersShield
-		end
-	end
---[[
-actions=auto_attack
-actions+=/call_action_list,name=cooldowns
-actions+=/worldvein_resonance,if=buff.lifeblood.stack<3
-# Dumping SotR charges
-actions+=/shield_of_the_righteous,if=(buff.avengers_valor.up&cooldown.shield_of_the_righteous.charges_fractional>=2.5)&(cooldown.seraphim.remains>gcd|!talent.seraphim.enabled)
-actions+=/shield_of_the_righteous,if=(buff.avenging_wrath.up&!talent.seraphim.enabled)|buff.seraphim.up&buff.avengers_valor.up
-actions+=/shield_of_the_righteous,if=(buff.avenging_wrath.up&buff.avenging_wrath.remains<4&!talent.seraphim.enabled)|(buff.seraphim.remains<4&buff.seraphim.up)
-actions+=/lights_judgment,if=buff.seraphim.up&buff.seraphim.remains<3
-actions+=/consecration,if=!consecration.up
-actions+=/judgment,if=(cooldown.judgment.remains<gcd&cooldown.judgment.charges_fractional>1&cooldown_react)|!talent.crusaders_judgment.enabled
-actions+=/avengers_shield,if=cooldown_react
-actions+=/judgment,if=cooldown_react|!talent.crusaders_judgment.enabled
-actions+=/concentrated_flame,if=(!talent.seraphim.enabled|buff.seraphim.up)&!dot.concentrated_flame_burn.remains>0|essence.the_crucible_of_flame.rank<3
-actions+=/lights_judgment,if=!talent.seraphim.enabled|buff.seraphim.up
-actions+=/anima_of_death
-actions+=/blessed_hammer,strikes=3
-actions+=/hammer_of_the_righteous
-actions+=/consecration
-actions+=/heart_essence,if=!(essence.the_crucible_of_flame.major|essence.worldvein_resonance.major|essence.anima_of_life_and_death.major|essence.memory_of_lucid_dreams.major)
-]]
-	Player.use_wings = (not AvengingWrath.known or Player.aw_remains == 0) and (Target.boss or Target.timeToDie > (Player.gcd * 5) or Player.enemies >= 3)
-	Player.pool_for_wings = Player.use_wings and (AvengingWrath.known and AvengingWrath:Ready(Player.gcd * 3))
-	self:cooldowns()
-	if WorldveinResonance:Usable() and Lifeblood:stack() < 3 then
-		UseCooldown(WorldveinResonance)
-	end
-	if ShieldOfTheRighteous:Usable() and (
-		((not Player.pool_for_wings or DivinePurpose.known and DivinePurpose:Up()) and (Player:HolyPower() >= 5 or ShieldOfTheRighteous.buff:Down() or JudgmentProt:Up())) or
-		(not Seraphim.known and between(Player.aw_remains, 0.1, 3)) or (Seraphim.known and between(Seraphim:Remains(), 0.1, 3))
-	) then
-		UseCooldown(ShieldOfTheRighteous, true)
-	end
-	if Seraphim.known and LightsJudgment:Usable() and Seraphim:Up() and Seraphim:Remains() < 3 then
-		UseCooldown(LightsJudgment)
-	end
-	if Consecration:Usable() and Player.consecration_remains < Player.haste_factor then
-		return Consecration
-	end
-	if AvengersShield:Usable() and Player.enemies >= 3 then
-		return AvengersShield
-	end
-	if JudgmentProt:Usable() and (not CrusadersJudgment.known or JudgmentProt:ChargesFractional() > 1.5 or (JudgmentProt:Down() and Player:HolyPower() == 4)) then
-		return JudgmentProt
-	end
-	if AvengersShield:Usable() then
-		return AvengersShield
-	end
-	if HammerOfWrath:Usable() then
-		return HammerOfWrath
-	end
-	if JudgmentProt:Usable() then
-		return JudgmentProt
-	end
-	if ConcentratedFlame:Usable() and (not Seraphim.known or Seraphim:Up()) and ConcentratedFlame.dot:Down() then
-		return ConcentratedFlame
-	end
-	if LightsJudgment:Usable() and (not Seraphim.known or Seraphim:Up()) then
-		UseCooldown(LightsJudgment)
-	end
-	if AnimaOfDeath:Usable() then
-		UseCooldown(AnimaOfDeath)
-	end
-	if BlessedHammer:Usable() then
-		return BlessedHammer
-	end
-	if HammerOfTheRighteous:Usable() then
-		return HammerOfTheRighteous
-	end
-	if Consecration:Usable() and (Player.consecration_remains < 4 or not (JudgmentProt:Ready(Player.haste_factor) or AvengersShield:Ready(Player.haste_factor))) then
-		return Consecration
-	end
-	if VigilantProtector:Usable() then
-		UseCooldown(VigilantProtector)
-	end
-end
 
-APL[SPEC.PROTECTION].cooldowns = function(self)
---[[
-actions.cooldowns=fireblood,if=buff.avenging_wrath.up
-actions.cooldowns+=/use_item,name=azsharas_font_of_power,if=cooldown.seraphim.remains<=10|!talent.seraphim.enabled
-actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=(debuff.razor_coral_debuff.stack>7&buff.avenging_wrath.up)|debuff.razor_coral_debuff.stack=0
-actions.cooldowns+=/seraphim,if=cooldown.shield_of_the_righteous.charges_fractional>=2
-actions.cooldowns+=/avenging_wrath,if=buff.seraphim.up|cooldown.seraphim.remains<2|!talent.seraphim.enabled
-actions.cooldowns+=/memory_of_lucid_dreams,if=!talent.seraphim.enabled|cooldown.seraphim.remains<=gcd|buff.seraphim.up
-actions.cooldowns+=/bastion_of_light,if=cooldown.shield_of_the_righteous.charges_fractional<=0.5
-actions.cooldowns+=/potion,if=buff.avenging_wrath.up
-actions.cooldowns+=/use_items,if=buff.seraphim.up|!talent.seraphim.enabled
-actions.cooldowns+=/use_item,name=grongs_primal_rage,if=cooldown.judgment.full_recharge_time>4&cooldown.avengers_shield.remains>4&(buff.seraphim.up|cooldown.seraphim.remains+4+gcd>expected_combat_length-time)&consecration.up
-actions.cooldowns+=/use_item,name=pocketsized_computation_device,if=cooldown.judgment.full_recharge_time>4*spell_haste&cooldown.avengers_shield.remains>4*spell_haste&(!equipped.grongs_primal_rage|!trinket.grongs_primal_rage.cooldown.up)&consecration.up
-actions.cooldowns+=/use_item,name=merekthas_fang,if=!buff.avenging_wrath.up&(buff.seraphim.up|!talent.seraphim.enabled)
-actions.cooldowns+=/use_item,name=razdunks_big_red_button
-]]
-	if WordOfGlory:Usable() and (Player:HealthPct() < 40 or (Player:HealthPct() < 60 and ShiningLight.free:Up())) then
-		UseCooldown(WordOfGlory)
-	end
-	if Seraphim:Usable() and Player:HolyPower() >= 5 then
-		UseCooldown(Seraphim)
-	end
-	if Player.use_wings and AvengingWrath:Usable() and (not Seraphim.known or Seraphim:Up() or Seraphim:Ready(2)) then
-		UseCooldown(AvengingWrath)
-	end
-	if MemoryOfLucidDreams:Usable() and (not Seraphim.known or Seraphim:Ready(Player.gcd) or Seraphim:Up()) then
-		UseCooldown(MemoryOfLucidDreams)
-	end
-	if Opt.pot and Target.boss and not Player:InArenaOrBattleground() and PotionOfUnbridledFury:Usable() then
-		UseCooldown(PotionOfUnbridledFury)
-	end
-	if WordOfGlory:Usable() and Player:HealthPct() < 80 and ShiningLight.free:Up() then
-		UseCooldown(WordOfGlory)
-	end
-end
-
-APL[SPEC.RETRIBUTION].main = function(self)
-	if Opt.defensives then
-		if Player:HealthPct() < 75 then
-			if DivineShield:Usable() and Player:HealthPct() < 20 then
-				UseExtra(DivineShield)
-			elseif LayOnHands:Usable() and Player:HealthPct() < 20 then
-				UseExtra(LayOnHands)
-			elseif SelflessHealer.known and FlashOfLight:Usable() and SelflessHealer:Stack() >= 4 and Player:HealthPct() < (Player.group_size < 5 and 75 or 50) then
-				UseExtra(FlashOfLight)
-			elseif WordOfGlory:Usable() and Player:HealthPct() < (Player.group_size < 5 and 60 or 35) then
-				UseExtra(WordOfGlory)
-			elseif BlessingOfProtection:Usable() and Player:UnderAttack() and Player:HealthPct() < 20 then
-				UseExtra(BlessingOfProtection)
-			end
-		end
-		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() and not Player:Dazed() then
-			UseExtra(BlessingOfFreedom)
-		end
-	end
-	if Opt.auras and not Player.aura then
-		if DevotionAura:Usable() and DevotionAura:Down() then
-			UseExtra(DevotionAura)
-		elseif RetributionAura:Usable() and RetributionAura:Down() then
-			UseExtra(RetributionAura)
-		elseif CrusaderAura:Usable() and CrusaderAura:Down() then
-			UseExtra(CrusaderAura)
-		end
-	end
-	if Player:TimeInCombat() == 0 then
---[[
-actions.precombat=flask
-actions.precombat+=/food
-actions.precombat+=/augmentation
-# Snapshot raid buffed stats before combat begins and pre-potting is done.
-actions.precombat+=/snapshot_stats
-actions.precombat+=/potion
-actions.precombat+=/use_item,name=azsharas_font_of_power
-actions.precombat+=/arcane_torrent,if=!talent.wake_of_ashes.enabled
-]]
-		if not Player:InArenaOrBattleground() then
-			if Opt.pot and GreaterFlaskOfTheUndertow:Usable() and GreaterFlaskOfTheUndertow.buff:Remains() < 300 then
-				UseCooldown(GreaterFlaskOfTheUndertow)
-			end
-			if LightningForgedAugmentRune:Usable() and LightningForgedAugmentRune.buff:Remains() < 300 then
-				UseCooldown(LightningForgedAugmentRune)
-			end
-			if Opt.pot and Target.boss and PotionOfUnbridledFury:Usable() then
-				UseCooldown(PotionOfUnbridledFury)
-			end
-		end
-	end
---[[
-actions=auto_attack
-actions+=/rebuke
-actions+=/call_action_list,name=cooldowns
-actions+=/call_action_list,name=generators
-]]
-	Player.use_wings = (not AvengingWrath.known or Player.aw_remains == 0) and (not Crusade.known or Player.crusade_remains == 0) and (Target.boss or Target.timeToDie > (Player.gcd * 5) or Player.enemies >= 3)
-	self:cooldowns()
-	return self:generators()
-end
-
-APL[SPEC.RETRIBUTION].cooldowns = function(self)
---[[
-actions.cooldowns=potion,if=(cooldown.guardian_of_azeroth.remains>90|!essence.condensed_lifeforce.major)&(buff.bloodlust.react|buff.avenging_wrath.up&buff.avenging_wrath.remains>18|buff.crusade.up&buff.crusade.remains<25)
-actions.cooldowns+=/lights_judgment,if=spell_targets.lights_judgment>=2|(!raid_event.adds.exists|raid_event.adds.in>75)
-actions.cooldowns+=/fireblood,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10
-actions.cooldowns+=/shield_of_vengeance,if=buff.seething_rage.down&buff.memory_of_lucid_dreams.down
-actions.cooldowns+=/use_item,name=ashvanes_razor_coral,if=debuff.razor_coral_debuff.down|(buff.avenging_wrath.remains>=20|buff.crusade.stack=10&buff.crusade.remains>15)&(cooldown.guardian_of_azeroth.remains>90|target.time_to_die<30|!essence.condensed_lifeforce.major)
-actions.cooldowns+=/the_unbound_force,if=time<=2|buff.reckless_force.up
-actions.cooldowns+=/blood_of_the_enemy,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10
-actions.cooldowns+=/guardian_of_azeroth,if=!talent.crusade.enabled&(cooldown.avenging_wrath.remains<5&holy_power>=3&(buff.inquisition.up|!talent.inquisition.enabled)|cooldown.avenging_wrath.remains>=45)|(talent.crusade.enabled&cooldown.crusade.remains<gcd&holy_power>=4|holy_power>=3&time<10&talent.wake_of_ashes.enabled|cooldown.crusade.remains>=45)
-actions.cooldowns+=/worldvein_resonance,if=cooldown.avenging_wrath.remains<gcd&holy_power>=3|talent.crusade.enabled&cooldown.crusade.remains<gcd&holy_power>=4|cooldown.avenging_wrath.remains>=45|cooldown.crusade.remains>=45
-actions.cooldowns+=/focused_azerite_beam,if=(!raid_event.adds.exists|raid_event.adds.in>30|spell_targets.divine_storm>=2)&!(buff.avenging_wrath.up|buff.crusade.up)&(cooldown.blade_of_justice.remains>gcd*3&cooldown.judgment.remains>gcd*3)
-actions.cooldowns+=/memory_of_lucid_dreams,if=(buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10)&holy_power<=3
-actions.cooldowns+=/purifying_blast,if=(!raid_event.adds.exists|raid_event.adds.in>30|spell_targets.divine_storm>=2)
-actions.cooldowns+=/use_item,effect_name=cyclotronic_blast,if=!(buff.avenging_wrath.up|buff.crusade.up)&(cooldown.blade_of_justice.remains>gcd*3&cooldown.judgment.remains>gcd*3)
-actions.cooldowns+=/avenging_wrath,if=(!talent.inquisition.enabled|buff.inquisition.up)&holy_power>=3
-actions.cooldowns+=/crusade,if=holy_power>=4|holy_power>=3&time<10&talent.wake_of_ashes.enabled
-]]
-	if Opt.pot and not Player:InArenaOrBattleground() and PotionOfUnbridledFury:Usable() and (not GuardianOfAzeroth.known or not GuardianOfAzeroth:Ready(90)) and (Player:BloodlustActive() or Player.aw_remains > 18 or (Player.crusade_remains > 0 and Player.crusade_remains < 25)) then
-		UseCooldown(PotionOfUnbridledFury)
-	end
-	if LightsJudgment:Usable() and Player.enemies >= 2 then
-		UseCooldown(LightsJudgment)
-	end
-	if Opt.defensives and Player:UnderAttack() and BloodOfTheEnemy.buff:Down() and MemoryOfLucidDreams:Down() and DivineShield:Down() and BlessingOfProtection:Down() then
-		if ShieldOfVengeance:Usable() and (not EyeForAnEye.known or EyeForAnEye:Down()) then
-			UseExtra(ShieldOfVengeance)
-		elseif EyeForAnEye:Usable() and ShieldOfVengeance:Down() then
-			UseExtra(EyeForAnEye)
-		end
-	end
-	if TheUnboundForce:Usable() and (RecklessForce:Up() or RecklessForce.counter:Stack() < 4) then
-		UseCooldown(TheUnboundForce)
-	elseif BloodOfTheEnemy:Usable() and (Player.aw_remains > 0 or Crusade.known and Crusade:Stack() >= 10) then
-		UseCooldown(BloodOfTheEnemy)
-	elseif GuardianOfAzeroth:Usable() and ((not Crusade.known and (AvengingWrath:Ready(5) and Player:HolyPower() >= 3 and (not Inquisition.known or Inquisition:Up()) or not AvengingWrath:Ready(45))) or (Crusade.known and (not Crusade:Ready(45) or (Crusade:Ready(Player.gcd) and Player:HolyPower() >= 4))) or (Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
-		UseCooldown(GuardianOfAzeroth)
-	elseif WorldveinResonance:Usable() and Lifeblood:Stack() < 4 and ((AvengingWrath:Ready(Player.gcd) and Player:HolyPower() >= 3) or (Crusade.known and Crusade:Ready(Player.gcd) and Player:HolyPower() >= 4) or not AvengingWrath:Ready(45) or (Crusade.known and not Crusade:Ready(45))) then
-		UseCooldown(WorldveinResonance)
-	elseif FocusedAzeriteBeam:Usable() and not (Player.aw_remains > 0 or Player.crusade_remains > 0 or BladeOfJustice:Ready(Player.gcd * 3) or Judgment:Ready(Player.gcd * 3)) then
-		UseCooldown(FocusedAzeriteBeam)
-	elseif MemoryOfLucidDreams:Usable() and (Player.aw_remains > 0 or Crusade:Stack() >= 10) and Player:HolyPower() <= 3 then
-		UseCooldown(MemoryOfLucidDreams)
-	elseif PurifyingBlast:Usable() then
-		UseCooldown(PurifyingBlast)
-	end
-	if HammerOfReckoning:Usable() and Player:HolyPower() >= 4 then
-		UseCooldown(HammerOfReckoning)
-	end
-	if Player.use_wings and AvengingWrath:Usable() and (not Inquisition.known or Inquisition:Up()) and Player:HolyPower() >= 3 then
-		UseCooldown(AvengingWrath)
-	end
-	if Player.use_wings and Crusade:Usable() and (Player:HolyPower() >= 4 or (Player:HolyPower() >= 3 and Player:TimeInCombat() < 10)) then
-		UseCooldown(Crusade)
-	end
-	if Opt.trinket and (Player.aw_remains > 8 or Player.crusade_remains > 8) then
-		if Trinket1:Usable() then
-			UseCooldown(Trinket1)
-		elseif Trinket2:Usable() then
-			UseCooldown(Trinket2)
-		end
-	end
-end
-
-APL[SPEC.RETRIBUTION].finishers = function(self)
---[[
-actions.finishers=variable,name=pool_for_wings,value=!talent.crusade.enabled&!buff.avenging_wrath.up&cooldown.avenging_wrath.remains<gcd*3|talent.crusade.enabled&!buff.crusade.up&cooldown.crusade.remains<gcd*3
-actions.finishers+=/variable,name=use_ds,value=spell_targets.divine_storm>=2&!talent.righteous_verdict.enabled|spell_targets.divine_storm>=3&talent.righteous_verdict.enabled|buff.empyrean_power.up&debuff.judgment.down&buff.divine_purpose.down&buff.avenging_wrath_autocrit.down
-actions.finishers+=/inquisition,if=buff.avenging_wrath.down&(buff.inquisition.down|buff.inquisition.remains<8&holy_power>=3|talent.execution_sentence.enabled&cooldown.execution_sentence.remains<10&buff.inquisition.remains<15|cooldown.avenging_wrath.remains<15&buff.inquisition.remains<20&holy_power>=3)
-actions.finishers+=/execution_sentence,if=spell_targets.divine_storm<=2&(!talent.crusade.enabled&cooldown.avenging_wrath.remains>10|talent.crusade.enabled&buff.crusade.down&cooldown.crusade.remains>10|buff.crusade.stack>=7)
-actions.finishers+=/divine_storm,if=variable.use_ds&!variable.pool_for_wings&((!talent.execution_sentence.enabled|(spell_targets.divine_storm>=2|cooldown.execution_sentence.remains>gcd*2))|(cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10))
-actions.finishers+=/templars_verdict,if=variable.pool_for_wings&(!talent.execution_sentence.enabled|cooldown.execution_sentence.remains>gcd*2|cooldown.avenging_wrath.remains>gcd*3&cooldown.avenging_wrath.remains<10|cooldown.crusade.remains>gcd*3&cooldown.crusade.remains<10|buff.crusade.up&buff.crusade.stack<10)
-]]
-	Player.pool_for_wings = Player.use_wings and ((AvengingWrath.known and AvengingWrath:Ready(Player.gcd * 3)) or (Crusade.known and Crusade:Ready(Player.gcd * 3)))
-	Player.use_ds = Player.enemies >= (RighteousVerdict.known and 3 or 2) or ((EmpyreanPower.known and EmpyreanPower:Up()) or (EmpyreanPowerAzerite.known and EmpyreanPowerAzerite:Up()) and Judgment:Down() and DivinePurpose:Down() and AvengingWrath.autocrit:Down())
-	if Inquisition:Usable() and Player.aw_remains == 0 and (Inquisition:Down() or (Inquisition:Remains() < 8 and Player:HolyPower() >= 3) or (ExecutionSentence.known and ExecutionSentence:Ready(10) and Inquisition:Remains() < 15) or (AvengingWrath:Ready(15) and Inquisition:Remains() < 20 and Player:HolyPower() >= 3)) then
-		return Inquisition
-	end
-	if ExecutionSentence:Usable() and Player.enemies <= 2 and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and ((Player.crusade_remains == 0 and not Crusade:Ready(10)) or Crusade:stack() >= 7)) or not (AvengingWrath.known or Crusade.known)) then
-		return ExecutionSentence
-	end
-	if Player.pool_for_wings then
-		return
-	end
-	if Player.use_ds and DivineStorm:Usable() and ((not ExecutionSentence.known or (Player.enemies >= 2 or not ExecutionSentence:Ready(Player.gcd * 2))) or ((AvengingWrath.known and between(AvengingWrath:Cooldown(), Player.gcd * 3, 10)) or (Crusade.known and between(Crusade:Cooldown(), Player.gcd * 3, 10) or (Player.crusade_remains > 0 and Crusade:Stack() < 10)))) then
-		return DivineStorm
-	end
-	if TemplarsVerdict:Usable() and (not ExecutionSentence.known or not ExecutionSentence:Ready(Player.gcd * 2) or (AvengingWrath.known and between(AvengingWrath:Cooldown(), Player.gcd * 3, 10)) or (Crusade.known and between(Crusade:Cooldown(), Player.gcd * 3, 10) or (Player.crusade_remains > 0 and Crusade:Stack() < 10))) then
-		return TemplarsVerdict
-	end
-end
-
-APL[SPEC.RETRIBUTION].generators = function(self)
---[[
-actions.generators=variable,name=HoW,value=(!talent.hammer_of_wrath.enabled|target.health.pct>=20&!(buff.avenging_wrath.up|buff.crusade.up))
-actions.generators+=/call_action_list,name=finishers,if=holy_power>=5|buff.memory_of_lucid_dreams.up|buff.seething_rage.up|talent.inquisition.enabled&buff.inquisition.down&holy_power>=3
-actions.generators+=/wake_of_ashes,if=(!raid_event.adds.exists|raid_event.adds.in>15|spell_targets.wake_of_ashes>=2)&(holy_power<=0|holy_power=1&cooldown.blade_of_justice.remains>gcd)&(cooldown.avenging_wrath.remains>10|talent.crusade.enabled&cooldown.crusade.remains>10)
-actions.generators+=/blade_of_justice,if=holy_power<=2|(holy_power=3&(cooldown.hammer_of_wrath.remains>gcd*2|variable.HoW))
-actions.generators+=/judgment,if=holy_power<=2|(holy_power<=4&(cooldown.blade_of_justice.remains>gcd*2|variable.HoW))
-actions.generators+=/hammer_of_wrath,if=holy_power<=4
-actions.generators+=/consecration,if=holy_power<=2|holy_power<=3&cooldown.blade_of_justice.remains>gcd*2|holy_power=4&cooldown.blade_of_justice.remains>gcd*2&cooldown.judgment.remains>gcd*2
-actions.generators+=/call_action_list,name=finishers,if=talent.hammer_of_wrath.enabled&target.health.pct<=20|buff.avenging_wrath.up|buff.crusade.up
-actions.generators+=/crusader_strike,if=cooldown.crusader_strike.charges_fractional>=1.75&(holy_power<=2|holy_power<=3&cooldown.blade_of_justice.remains>gcd*2|holy_power=4&cooldown.blade_of_justice.remains>gcd*2&cooldown.judgment.remains>gcd*2&cooldown.consecration.remains>gcd*2)
-actions.generators+=/call_action_list,name=finishers
-actions.generators+=/concentrated_flame
-actions.generators+=/reaping_flames
-actions.generators+=/crusader_strike,if=holy_power<=4
-actions.generators+=/arcane_torrent,if=holy_power<=4
-]]
-	Player.how = not HammerOfWrath.known or (Target.healthPercentage >= 20 and not (Player.aw_remains > 0 or Player.crusade_remains > 0))
-	local finisher = self:finishers()
-	if Player:HolyPower() >= 5 or MemoryOfLucidDreams:Up() or BloodOfTheEnemy.buff:Up() or (Inquisition.known and Inquisition:Down() and Player:HolyPower() >= 3) then
-		if finisher then return finisher end
-	end
-	if WakeOfAshes:Usable() and Player:HolyPower() <= 2 and ((AvengingWrath.known and not AvengingWrath:Ready(10)) or (Crusade.known and not Crusade:Ready(10)) or not (AvengingWrath.known or Crusade.known)) then
-		UseCooldown(WakeOfAshes)
-	end
-	if BladeOfJustice:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 3 and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
-		return BladeOfJustice
-	end
-	if Judgment:Usable() and (Player:HolyPower() <= 2 or (Player:HolyPower() <= 4 and DivinePunisher:Down() and (Player.how or not HammerOfWrath:Ready(Player.gcd * 2)))) then
-		return Judgment
-	end
-	if HammerOfWrath:Usable() and Player:HolyPower() <= 4 then
-		return HammerOfWrath
-	end
-	if ConsecrationRet:Usable() and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2))))) then
-		return ConsecrationRet
-	end
-	if Player.aw_remains > 0 or Player.crusade_remains > 0 or (HammerOfWrath.known and Target.healthPercentage <= 20) or (DivinePunisher:Up() and Judgment:Ready(Player.gcd)) then
-		if finisher then return finisher end
-	end
-	if CrusaderStrike:Usable() and CrusaderStrike:ChargesFractional() >= 1.75 and (Player:HolyPower() <= 2 or (not BladeOfJustice:Ready(Player.gcd * 2) and (Player:HolyPower() <= 3 or (Player:HolyPower() <= 4 and not Judgment:Ready(Player.gcd * 2) and (not ConsecrationRet.known or not ConsecrationRet:Ready(Player.gcd * 2)))))) then
-		return CrusaderStrike
-	end
-	if finisher then return finisher end
-	if ConcentratedFlame:Usable() and ConcentratedFlame.dot:Down() then
-		return ConcentratedFlame
-	end
-	if ReapingFlames:Usable() then
-		return ReapingFlames
-	end
-	if CrusaderStrike:Usable() and Player:HolyPower() <= 4 then
-		return CrusaderStrike
 	end
 end
 
 APL.Interrupt = function(self)
-	if AvengersShield:Usable() then
-		return AvengersShield
-	end
-	if Rebuke:Usable() then
-		return Rebuke
-	end
-	if HammerOfJustice:Usable() then
-		return HammerOfJustice
-	end
+
 end
 
 -- End Action Priority Lists
@@ -2021,75 +1267,6 @@ function UI:SnapAllPanels()
 	retardedExtraPanel:SetPoint('BOTTOMRIGHT', retardedPanel, 'TOPLEFT', -3, -21)
 end
 
-UI.anchor_points = {
-	blizzard = { -- Blizzard Personal Resource Display (Default)
-		[SPEC.HOLY] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
-		},
-		[SPEC.PROTECTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
-		},
-		[SPEC.RETRIBUTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 36 },
-			['below'] = { 'TOP', 'BOTTOM', 0, -32 }
-		},
-	},
-	kui = { -- Kui Nameplates
-		[SPEC.HOLY] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
-		},
-		[SPEC.PROTECTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
-		},
-		[SPEC.RETRIBUTION] = {
-			['above'] = { 'BOTTOM', 'TOP', 0, 28 },
-			['below'] = { 'TOP', 'BOTTOM', 0, 4 }
-		},
-	},
-}
-
-function UI.OnResourceFrameHide()
-	if Opt.snap then
-		retardedPanel:ClearAllPoints()
-	end
-end
-
-function UI.OnResourceFrameShow()
-	if Opt.snap and UI.anchor.points then
-		local p = UI.anchor.points[Player.spec][Opt.snap]
-		retardedPanel:ClearAllPoints()
-		retardedPanel:SetPoint(p[1], UI.anchor.frame, p[2], p[3], p[4])
-		UI:SnapAllPanels()
-	end
-end
-
-function UI:HookResourceFrame()
-	if KuiNameplatesCoreSaved and KuiNameplatesCoreCharacterSaved and
-		not KuiNameplatesCoreSaved.profiles[KuiNameplatesCoreCharacterSaved.profile].use_blizzard_personal
-	then
-		self.anchor.points = self.anchor_points.kui
-		self.anchor.frame = KuiNameplatesPlayerAnchor
-	else
-		self.anchor.points = self.anchor_points.blizzard
-		self.anchor.frame = NamePlateDriverFrame:GetClassNameplateManaBar()
-	end
-	if self.anchor.frame then
-		self.anchor.frame:HookScript('OnHide', self.OnResourceFrameHide)
-		self.anchor.frame:HookScript('OnShow', self.OnResourceFrameShow)
-	end
-end
-
-function UI:ShouldHide()
-	return (Player.spec == SPEC.NONE or
-		   (Player.spec == SPEC.HOLY and Opt.hide.holy) or
-		   (Player.spec == SPEC.PROTECTION and Opt.hide.protection) or
-		   (Player.spec == SPEC.RETRIBUTION and Opt.hide.retribution))
-end
-
 function UI:Disappear()
 	retardedPanel:Hide()
 	retardedPanel.icon:Hide()
@@ -2106,79 +1283,22 @@ end
 
 function UI:UpdateDisplay()
 	timer.display = 0
-	local dim, text_tl, text_bl
+	local dim
 	if Opt.dimmer then
 		dim = not ((not Player.main) or
 		           (Player.main.spellId and IsUsableSpell(Player.main.spellId)) or
 		           (Player.main.itemId and IsUsableItem(Player.main.itemId)))
 	end
-
-	if AvengingWrath.known and Player.aw_remains > 0 then
-		text_tl = format('%.1fs', Player.aw_remains)
-	elseif Crusade.known and Player.crusade_remains > 0 then
-		text_tl = format('%.1fs', Player.crusade_remains)
-	end
-	if (Consecration.known or ConsecrationRet.known) and Player.consecration_remains > 0 then
-		text_bl = format('%.1fs', Player.consecration_remains)
-	end
-
 	retardedPanel.dimmer:SetShown(dim)
-	retardedPanel.text.tl:SetText(text_tl)
-	retardedPanel.text.bl:SetText(text_bl)
 	--retardedPanel.text.bl:SetText(format('%.1fs', Target.timeToDie))
 end
 
 function UI:UpdateCombat()
 	timer.combat = 0
-	local _, start, duration, remains, spellId, speed, max_speed
-	Player.ctime = GetTime()
-	Player.time = Player.ctime - Player.time_diff
-	Player.main =  nil
-	Player.cd = nil
-	Player.interrupt = nil
-	Player.extra = nil
-	start, duration = GetSpellCooldown(61304)
-	Player.gcd_remains = start > 0 and duration - (Player.ctime - start) or 0
-	_, _, _, _, remains, _, _, _, spellId = UnitCastingInfo('player')
-	Player.ability_casting = abilities.bySpellId[spellId]
-	Player.execute_remains = max(remains and (remains / 1000 - Player.ctime) or 0, Player.gcd_remains)
-	Player.haste_factor = 1 / (1 + UnitSpellHaste('player') / 100)
-	Player.gcd = 1.5 * Player.haste_factor
-	Player.health = UnitHealth('player')
-	Player.health_max = UnitHealthMax('player')
-	Player.mana_regen = GetPowerRegen()
-	Player.mana = UnitPower('player', 0) + (Player.mana_regen * Player.execute_remains)
-	if Player.ability_casting then
-		Player.mana = Player.mana - Player.ability_casting:ManaCost()
-	end
-	Player.mana = min(max(Player.mana, 0), Player.mana_max)
-	Player.holy_power = UnitPower('player', 9)
-	speed, max_speed = GetUnitSpeed('player')
-	Player.moving = speed ~= 0
-	Player.movement_speed = max_speed / 7 * 100
 
-	if AvengingWrath.known then
-		Player.aw_remains = AvengingWrath:Remains()
-	end
-	if Crusade.known then
-		Player.crusade_remains = Crusade:Remains()
-	end
-	if Consecration.known then
-		Player.consecration_remains = Consecration:Remains()
-	elseif ConsecrationRet.known then
-		Player.consecration_remains = ConsecrationRet:Remains()
-	end
+	Player:Update()
 
-	trackAuras:Purge()
-	if Opt.auto_aoe then
-		local ability
-		for _, ability in next, abilities.autoAoe do
-			ability:UpdateTargetsHit()
-		end
-		autoAoe:Purge()
-	end
-
-	Player.main = APL[Player.spec]:main()
+	Player.main = APL:Main()
 	if Player.main then
 		retardedPanel.icon:SetTexture(Player.main.icon)
 	end
@@ -2189,12 +1309,11 @@ function UI:UpdateCombat()
 		retardedExtraPanel.icon:SetTexture(Player.extra.icon)
 	end
 	if Opt.interrupt then
-		local ends, notInterruptible
-		_, _, _, start, ends, _, _, notInterruptible = UnitCastingInfo('target')
+		local _, _, _, start, ends = UnitCastingInfo('target')
 		if not start then
-			_, _, _, start, ends, _, notInterruptible = UnitChannelInfo('target')
+			_, _, _, start, ends = UnitChannelInfo('target')
 		end
-		if start and not notInterruptible then
+		if start then
 			Player.interrupt = APL.Interrupt()
 			retardedInterruptPanel.cast:SetCooldown(start / 1000, (ends - start) / 1000)
 		end
@@ -2203,12 +1322,13 @@ function UI:UpdateCombat()
 		end
 		retardedInterruptPanel.icon:SetShown(Player.interrupt)
 		retardedInterruptPanel.border:SetShown(Player.interrupt)
-		retardedInterruptPanel:SetShown(start and not notInterruptible)
+		retardedInterruptPanel:SetShown(start)
 	end
 	retardedPanel.icon:SetShown(Player.main)
 	retardedPanel.border:SetShown(Player.main)
 	retardedCooldownPanel:SetShown(Player.cd)
 	retardedExtraPanel:SetShown(Player.extra)
+
 	self:UpdateDisplay()
 	self:UpdateGlows()
 end
@@ -2224,17 +1344,16 @@ end
 -- Start Event Handling
 
 function events:ADDON_LOADED(name)
-	if name == 'Retarded' then
+	if name == ADDON then
 		Opt = Retarded
 		if not Opt.frequency then
-			print('It looks like this is your first time running ' .. name .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
 			print('Type |cFFFFD000' .. SLASH_Retarded1 .. '|r for a list of commands.')
 		end
 		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. name .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 		InitOpts()
-		Azerite:Init()
 		UI:UpdateDraggable()
 		UI:UpdateAlpha()
 		UI:UpdateScale()
@@ -2253,6 +1372,7 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		if Opt.auto_aoe then
 			autoAoe:Remove(dstGUID)
 		end
+		return
 	end
 	if eventType == 'SWING_DAMAGE' or eventType == 'SWING_MISSED' then
 		if dstGUID == Player.guid then
@@ -2267,13 +1387,13 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 	end
 
-	if srcGUID ~= Player.guid then
+	if not srcGUID == Player.guid then
 		return
 	end
 
 	local ability = spellId and abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, spellName or 'Unknown', spellId or 0))
+		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', eventType, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -2281,7 +1401,6 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 	   eventType == 'SPELL_CAST_START' or
 	   eventType == 'SPELL_CAST_SUCCESS' or
 	   eventType == 'SPELL_CAST_FAILED' or
-	   eventType == 'SPELL_AURA_REMOVED' or
 	   eventType == 'SPELL_DAMAGE' or
 	   eventType == 'SPELL_ABSORBED' or
 	   eventType == 'SPELL_PERIODIC_DAMAGE' or
@@ -2296,31 +1415,15 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 
 	UI:UpdateCombatWithin(0.05)
 	if eventType == 'SPELL_CAST_SUCCESS' then
-		Player.last_ability = ability
-		ability.last_used = Player.time
-		if ability.triggers_gcd then
-			Player.previous_gcd[10] = nil
-			table.insert(Player.previous_gcd, 1, ability)
-		end
-		if ability.travel_start then
-			ability.travel_start[dstGUID] = Player.time
-		end
+		ability:CastSuccess(dstGUID, timeStamp)
 		if Opt.previous and retardedPanel:IsVisible() then
 			retardedPreviousPanel.ability = ability
-			retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\border.blp')
+			retardedPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
 			retardedPreviousPanel.icon:SetTexture(ability.icon)
 			retardedPreviousPanel:Show()
 		end
-		if ability == Judgment and DivinePunisher.known then
-			DivinePunisher.target = dstGUID
-		end
 		return
-	elseif eventType == 'SPELL_ENERGIZE' then
-		if ability == DivinePunisher then
-			DivinePunisher.target = nil
-		end
 	end
-
 	if dstGUID == Player.guid then
 		return -- ignore buffs beyond here
 	end
@@ -2341,11 +1444,9 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		end
 	end
 	if eventType == 'SPELL_ABSORBED' or eventType == 'SPELL_MISSED' or eventType == 'SPELL_DAMAGE' or eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
-		if ability.travel_start and ability.travel_start[dstGUID] then
-			ability.travel_start[dstGUID] = nil
-		end
+		ability:CastLanded(dstGUID, timeStamp, eventType)
 		if Opt.previous and Opt.miss_effect and eventType == 'SPELL_MISSED' and retardedPanel:IsVisible() and ability == retardedPreviousPanel.ability then
-			retardedPreviousPanel.border:SetTexture('Interface\\AddOns\\Retarded\\misseffect.blp')
+			retardedPreviousPanel.border:SetTexture(ADDON_PATH .. 'misseffect.blp')
 		end
 	end
 end
@@ -2381,8 +1482,8 @@ function events:PLAYER_REGEN_ENABLED()
 	end
 	local _, ability, guid
 	for _, ability in next, abilities.velocity do
-		for guid in next, ability.travel_start do
-			ability.travel_start[guid] = nil
+		for guid in next, ability.traveling do
+			ability.traveling[guid] = nil
 		end
 	end
 	if Opt.auto_aoe then
@@ -2424,21 +1525,7 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
-	Azerite:Update()
 	Player:UpdateAbilities()
-end
-
-function events:PLAYER_SPECIALIZATION_CHANGED(unitName)
-	if unitName ~= 'player' then
-		return
-	end
-	Player.spec = GetSpecialization() or 0
-	retardedPreviousPanel.ability = nil
-	Player:SetTargetMode(1)
-	Target:Update()
-	events:PLAYER_EQUIPMENT_CHANGED()
-	events:UPDATE_SHAPESHIFT_FORM()
-	events:PLAYER_REGEN_ENABLED()
 end
 
 function events:SPELL_UPDATE_COOLDOWN()
@@ -2449,15 +1536,9 @@ function events:SPELL_UPDATE_COOLDOWN()
 			start = castStart / 1000
 			duration = (castEnd - castStart) / 1000
 		else
-			start, duration = GetSpellCooldown(61304)
+			start, duration = GetSpellCooldown(47524)
 		end
 		retardedPanel.swipe:SetCooldown(start, duration)
-	end
-end
-
-function events:UNIT_POWER_UPDATE(srcName, powerType)
-	if srcName == 'player' and powerType == 'HOLY_POWER' then
-		UI:UpdateCombatWithin(0.05)
 	end
 end
 
@@ -2473,46 +1554,40 @@ function events:UNIT_SPELLCAST_STOP(srcName)
 	end
 end
 
-function events:UPDATE_SHAPESHIFT_FORM()
-	local aura = GetShapeshiftForm() or 0
-	if aura == 1 then
-		Player.aura = CrusaderAura
-	elseif aura == 2 then
-		Player.aura = DevotionAura
-	elseif aura == 3 then
-		Player.aura = RetributionAura
-	else
-		Player.aura = nil
+function events:UNIT_SPELLCAST_SUCCEEDED(srcName, castGUID, spellId)
+	if srcName ~= 'player' or castGUID:sub(6, 6) ~= '3' then
+		return
 	end
-end
-
-function events:PLAYER_PVP_TALENT_UPDATE()
-	Player:UpdateAbilities()
-end
-
-function events:AZERITE_ESSENCE_UPDATE()
-	Azerite:Update()
-	Player:UpdateAbilities()
-end
-
-function events:GROUP_ROSTER_UPDATE()
-	Player.group_size = min(max(GetNumGroupMembers(), 1), 10)
+	local ability = spellId and abilities.bySpellId[spellId]
+	if not ability or not ability.traveling then
+		return
+	end
+	ability.next_castGUID = castGUID
 end
 
 function events:ACTIONBAR_SLOT_CHANGED()
 	UI:UpdateGlows()
 end
 
+function events:GROUP_ROSTER_UPDATE()
+	Player.group_size = min(max(GetNumGroupMembers(), 1), 40)
+end
+
 function events:PLAYER_ENTERING_WORLD()
 	if #UI.glows == 0 then
 		UI:CreateOverlayGlows()
-		UI:HookResourceFrame()
 	end
 	local _
 	_, Player.instance = IsInInstance()
 	Player.guid = UnitGUID('player')
-	events:PLAYER_SPECIALIZATION_CHANGED('player')
+	Player.level = UnitLevel('player')
+	retardedPreviousPanel.ability = nil
+	Player:SetTargetMode(1)
 	events:GROUP_ROSTER_UPDATE()
+	events:PLAYER_EQUIPMENT_CHANGED()
+	events:PLAYER_REGEN_ENABLED()
+	Target:Update()
+	Player:Update()
 end
 
 retardedPanel.button:SetScript('OnClick', function(self, button, down)
@@ -2575,10 +1650,10 @@ local function Status(desc, opt, ...)
 	else
 		opt_view = opt and '|cFF00C000On|r' or '|cFFC00000Off|r'
 	end
-	print('Retarded -', desc .. ':', opt_view, ...)
+	print(ADDON, '-', desc .. ':', opt_view, ...)
 end
 
-function SlashCmdList.Retarded(msg, editbox)
+SlashCmdList[ADDON] = function(msg, editbox)
 	msg = { strsplit(' ', msg:lower()) }
 	if startsWith(msg[1], 'lock') then
 		if msg[2] then
@@ -2586,20 +1661,6 @@ function SlashCmdList.Retarded(msg, editbox)
 			UI:UpdateDraggable()
 		end
 		return Status('Locked', Opt.locked)
-	end
-	if startsWith(msg[1], 'snap') then
-		if msg[2] then
-			if msg[2] == 'above' or msg[2] == 'over' then
-				Opt.snap = 'above'
-			elseif msg[2] == 'below' or msg[2] == 'under' then
-				Opt.snap = 'below'
-			else
-				Opt.snap = false
-				doomedPanel:ClearAllPoints()
-			end
-			UI.OnResourceFrameShow()
-		end
-		return Status('Snap to the Personal Resource Display frame', Opt.snap)
 	end
 	if msg[1] == 'scale' then
 		if startsWith(msg[2], 'prev') then
@@ -2630,12 +1691,12 @@ function SlashCmdList.Retarded(msg, editbox)
 			end
 			return Status('Interrupt ability icon scale', Opt.scale.interrupt, 'times')
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.scale.extra = tonumber(msg[3]) or 0.4
 				UI:UpdateScale()
 			end
-			return Status('Extra/Pet cooldown ability icon scale', Opt.scale.extra, 'times')
+			return Status('Extra cooldown ability icon scale', Opt.scale.extra, 'times')
 		end
 		if msg[2] == 'glow' then
 			if msg[3] then
@@ -2644,7 +1705,7 @@ function SlashCmdList.Retarded(msg, editbox)
 			end
 			return Status('Action button glow scale', Opt.scale.glow, 'times')
 		end
-		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000pet 0.4|r, and |cFFFFD000glow 1|r')
+		return Status('Default icon scale options', '|cFFFFD000prev 0.7|r, |cFFFFD000main 1|r, |cFFFFD000cd 0.7|r, |cFFFFD000interrupt 0.4|r, |cFFFFD000extra 0.4|r, and |cFFFFD000glow 1|r')
 	end
 	if msg[1] == 'alpha' then
 		if msg[2] then
@@ -2681,12 +1742,12 @@ function SlashCmdList.Retarded(msg, editbox)
 			end
 			return Status('Glowing ability buttons (interrupt icon)', Opt.glow.interrupt)
 		end
-		if startsWith(msg[2], 'ex') or startsWith(msg[2], 'pet') then
+		if startsWith(msg[2], 'ex') then
 			if msg[3] then
 				Opt.glow.extra = msg[3] == 'on'
 				UI:UpdateGlows()
 			end
-			return Status('Glowing ability buttons (extra/pet cooldown icon)', Opt.glow.extra)
+			return Status('Glowing ability buttons (extra cooldown icon)', Opt.glow.extra)
 		end
 		if startsWith(msg[2], 'bliz') then
 			if msg[3] then
@@ -2704,7 +1765,7 @@ function SlashCmdList.Retarded(msg, editbox)
 			end
 			return Status('Glow color', '|cFFFF0000' .. Opt.glow.color.r, '|cFF00FF00' .. Opt.glow.color.g, '|cFF0000FF' .. Opt.glow.color.b)
 		end
-		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000pet|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
+		return Status('Possible glow options', '|cFFFFD000main|r, |cFFFFD000cd|r, |cFFFFD000interrupt|r, |cFFFFD000extra|r, |cFFFFD000blizzard|r, and |cFFFFD000color')
 	end
 	if startsWith(msg[1], 'prev') then
 		if msg[2] then
@@ -2718,13 +1779,13 @@ function SlashCmdList.Retarded(msg, editbox)
 			Opt.always_on = msg[2] == 'on'
 			Target:Update()
 		end
-		return Status('Show the Doomed UI without a target', Opt.always_on)
+		return Status('Show the ' .. ADDON .. ' UI without a target', Opt.always_on)
 	end
 	if msg[1] == 'cd' then
 		if msg[2] then
 			Opt.cooldown = msg[2] == 'on'
 		end
-		return Status('Use Doomed for cooldown management', Opt.cooldown)
+		return Status('Use ' .. ADDON .. ' for cooldown management', Opt.cooldown)
 	end
 	if msg[1] == 'swipe' then
 		if msg[2] then
@@ -2758,26 +1819,6 @@ function SlashCmdList.Retarded(msg, editbox)
 		end
 		return Status('Only use cooldowns on bosses', Opt.boss_only)
 	end
-	if msg[1] == 'hidespec' or startsWith(msg[1], 'spec') then
-		if msg[2] then
-			if startsWith(msg[2], 'h') then
-				Opt.hide.holy = not Opt.hide.holy
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Holy specialization', not Opt.hide.holy)
-			end
-			if startsWith(msg[2], 'p') then
-				Opt.hide.protection = not Opt.hide.protection
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Protection specialization', not Opt.hide.protection)
-			end
-			if startsWith(msg[2], 'r') then
-				Opt.hide.retribution = not Opt.hide.retribution
-				events:PLAYER_SPECIALIZATION_CHANGED('player')
-				return Status('Retribution specialization', not Opt.hide.retribution)
-			end
-		end
-		return Status('Possible hidespec options', '|cFFFFD000holy|r/|cFFFFD000protection|r/|cFFFFD000retribution|r')
-	end
 	if startsWith(msg[1], 'int') then
 		if msg[2] then
 			Opt.interrupt = msg[2] == 'on'
@@ -2796,6 +1837,12 @@ function SlashCmdList.Retarded(msg, editbox)
 		end
 		return Status('Length of time target exists in auto AoE after being hit', Opt.auto_aoe_ttl, 'seconds')
 	end
+	if msg[1] == 'ttd' then
+		if msg[2] then
+			Opt.cd_ttd = tonumber(msg[2]) or 8
+		end
+		return Status('Minimum enemy lifetime to use cooldowns on (ignored on bosses)', Opt.cd_ttd, 'seconds')
+	end
 	if startsWith(msg[1], 'pot') then
 		if msg[2] then
 			Opt.pot = msg[2] == 'on'
@@ -2808,54 +1855,41 @@ function SlashCmdList.Retarded(msg, editbox)
 		end
 		return Status('Show on-use trinkets in cooldown UI', Opt.trinket)
 	end
-	if startsWith(msg[1], 'de') then
-		if msg[2] then
-			Opt.defensives = msg[2] == 'on'
-		end
-		return Status('Show defensives/emergency heals in extra UI', Opt.defensives)
-	end
-	if startsWith(msg[1], 'au') then
-		if msg[2] then
-			Opt.auras = msg[2] == 'on'
-		end
-		return Status('show aura reminders in extra UI', Opt.auras)
-	end
 	if msg[1] == 'reset' then
 		retardedPanel:ClearAllPoints()
 		retardedPanel:SetPoint('CENTER', 0, -169)
 		UI:SnapAllPanels()
 		return Status('Position has been reset to', 'default')
 	end
-	print('Retarded (version: |cFFFFD000' .. GetAddOnMetadata('Retarded', 'Version') .. '|r) - Commands:')
+	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
 	local _, cmd
 	for _, cmd in next, {
-		'locked |cFF00C000on|r/|cFFC00000off|r - lock the Retarded UI so that it can\'t be moved',
-		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the Retarded UI to the Personal Resource Display',
-		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the Retarded UI icons',
-		'alpha |cFFFFD000[percent]|r - adjust the transparency of the Retarded UI icons',
+		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
+		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the ' .. ADDON .. ' UI icons',
+		'alpha |cFFFFD000[percent]|r - adjust the transparency of the ' .. ADDON .. ' UI icons',
 		'frequency |cFFFFD000[number]|r - set the calculation frequency (default is every 0.2 seconds)',
 		'glow |cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000blizzard|r |cFF00C000on|r/|cFFC00000off|r - glowing ability buttons on action bars',
 		'glow color |cFFF000000.0-1.0|r |cFF00FF000.1-1.0|r |cFF0000FF0.0-1.0|r - adjust the color of the ability button glow',
 		'previous |cFF00C000on|r/|cFFC00000off|r - previous ability icon',
-		'always |cFF00C000on|r/|cFFC00000off|r - show the Retarded UI without a target',
-		'cd |cFF00C000on|r/|cFFC00000off|r - use Retarded for cooldown management',
+		'always |cFF00C000on|r/|cFFC00000off|r - show the ' .. ADDON .. ' UI without a target',
+		'cd |cFF00C000on|r/|cFFC00000off|r - use ' .. ADDON .. ' for cooldown management',
 		'swipe |cFF00C000on|r/|cFFC00000off|r - show spell casting swipe animation on main ability icon',
 		'dim |cFF00C000on|r/|cFFC00000off|r - dim main ability icon when you don\'t have enough resources to use it',
 		'miss |cFF00C000on|r/|cFFC00000off|r - red border around previous ability when it fails to hit',
 		'aoe |cFF00C000on|r/|cFFC00000off|r - allow clicking main ability icon to toggle amount of targets (disables moving)',
 		'bossonly |cFF00C000on|r/|cFFC00000off|r - only use cooldowns on bosses',
-		'hidespec |cFFFFD000holy|r/|cFFFFD000protection|r/|cFFFFD000retribution|r - toggle disabling Retarded for specializations',
 		'interrupt |cFF00C000on|r/|cFFC00000off|r - show an icon for interruptable spells',
 		'auto |cFF00C000on|r/|cFFC00000off|r  - automatically change target mode on AoE spells',
 		'ttl |cFFFFD000[seconds]|r  - time target exists in auto AoE after being hit (default is 10 seconds)',
+		'ttd |cFFFFD000[seconds]|r  - minimum enemy lifetime to use cooldowns on (default is 8 seconds, ignored on bosses)',
 		'pot |cFF00C000on|r/|cFFC00000off|r - show flasks and battle potions in cooldown UI',
 		'trinket |cFF00C000on|r/|cFFC00000off|r - show on-use trinkets in cooldown UI',
-		'defensives |cFF00C000on|r/|cFFC00000off|r - show defensives/emergency heals in extra UI',
-		'auras |cFF00C000on|r/|cFFC00000off|r - show aura reminders in extra UI',
-		'|cFFFFD000reset|r - reset the location of the Retarded UI to default',
+		'|cFFFFD000reset|r - reset the location of the ' .. ADDON .. ' UI to default',
 	} do
 		print('  ' .. SLASH_Retarded1 .. ' ' .. cmd)
 	end
 	print('Got ideas for improvement or found a bug? Talk to me on Battle.net:',
 		'|c' .. BATTLENET_FONT_COLOR:GenerateHexColor() .. '|HBNadd:Spy#1955|h[Spy#1955]|h|r')
 end
+
+-- End Slash Commands

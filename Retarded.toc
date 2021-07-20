@@ -1,7 +1,7 @@
-## Interface: 90001
+## Interface: 20501
 ## Title: Retarded
 ## Notes: Retarded is an addon for paladins that simplifies gameplay and maximizes DPS by doing all the decision making for you
 ## Author: jcadduono @ curseforge.com or Spy#1955 @ BattleTag
 ## SavedVariablesPerCharacter: Retarded
-## Version: 9.0.1-1
+## Version: 2.5.1-0
 Retarded.lua
