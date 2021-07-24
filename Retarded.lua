@@ -46,7 +46,6 @@ BINDING_HEADER_RETARDED = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
-		local k, v
 		for k, v in next, ref do
 			if t[k] == nil then
 				local pchar
@@ -343,14 +342,13 @@ function autoAoe:Remove(guid)
 end
 
 function autoAoe:Clear()
-	local guid
 	for guid in next, self.targets do
 		self.targets[guid] = nil
 	end
 end
 
 function autoAoe:Update()
-	local count, i = 0
+	local count = 0
 	for i in next, self.targets do
 		count = count + 1
 	end
@@ -369,7 +367,7 @@ function autoAoe:Update()
 end
 
 function autoAoe:Purge()
-	local update, guid, t
+	local update
 	for guid, t in next, self.targets do
 		if Player.time - t > Opt.auto_aoe_ttl then
 			self.targets[guid] = nil
@@ -432,7 +430,6 @@ function Ability:Match(spell)
 		if spell == self.spellId then
 			return true
 		end
-		local _, id
 		for _, id in next, self.spellIds do
 			if spell == id then
 				return true
@@ -467,7 +464,7 @@ function Ability:Remains(mine)
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
-	local _, i, id, expires
+	local _, id, expires
 	for i = 1, 40 do
 		_, _, _, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter .. (mine and '|PLAYER' or ''))
 		if not id then
@@ -504,7 +501,7 @@ function Ability:Traveling(all)
 	if not self.traveling then
 		return 0
 	end
-	local count, cast, _ = 0
+	local count = 0
 	for _, cast in next, self.traveling do
 		if all or cast.dstGUID == Target.guid then
 			if Player.time - cast.start < self.max_range / self.velocity then
@@ -520,9 +517,8 @@ function Ability:TravelTime()
 end
 
 function Ability:Ticking()
-	local count, ticking, _ = 0, {}
+	local count, ticking = 0, {}
 	if self.aura_targets then
-		local guid, aura
 		for guid, aura in next, self.aura_targets do
 			if aura.expires - Player.time > Player.execute_remains then
 				ticking[guid] = true
@@ -530,7 +526,6 @@ function Ability:Ticking()
 		end
 	end
 	if self.traveling then
-		local cast
 		for _, cast in next, self.traveling do
 			if Player.time - cast.start < self.max_range / self.velocity then
 				ticking[cast.dstGUID] = true
@@ -563,7 +558,7 @@ function Ability:Cooldown()
 end
 
 function Ability:Stack()
-	local _, i, id, expires, count
+	local _, id, expires, count
 	for i = 1, 40 do
 		_, _, count, _, _, expires, _, _, _, id = UnitAura(self.auraTarget, i, self.auraFilter)
 		if not id then
@@ -680,7 +675,6 @@ function Ability:UpdateTargetsHit()
 			autoAoe:Clear()
 		end
 		self.auto_aoe.target_count = 0
-		local guid
 		for guid in next, self.auto_aoe.targets do
 			autoAoe:Add(guid)
 			self.auto_aoe.targets[guid] = nil
@@ -718,7 +712,7 @@ function Ability:CastLanded(dstGUID, timeStamp, eventType)
 	if not self.traveling then
 		return
 	end
-	local guid, cast, oldest
+	local oldest
 	for guid, cast in next, self.traveling do
 		if Player.time - cast.start >= self.max_range / self.velocity + 0.2 then
 			self.traveling[guid] = nil -- spell traveled 0.2s past max range, delete it, this should never happen
@@ -737,7 +731,6 @@ end
 local trackAuras = {}
 
 function trackAuras:Purge()
-	local _, ability, guid, expires
 	for _, ability in next, abilities.trackAuras do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= Player.time then
@@ -748,7 +741,6 @@ function trackAuras:Purge()
 end
 
 function trackAuras:Remove(guid)
-	local _, ability
 	for _, ability in next, abilities.trackAuras do
 		ability:RemoveAura(guid)
 	end
@@ -950,7 +942,6 @@ function Player:Equipped(itemID, slot)
 	if slot then
 		return GetInventoryItemID('player', slot) == itemID, slot
 	end
-	local i
 	for i = 1, 19 do
 		if GetInventoryItemID('player', i) == itemID then
 			return true, i
@@ -964,7 +955,6 @@ function Player:UpdateAbilities()
 	self.mana_max = UnitPowerMax('player', 0)
 	self.mana_base = self.mana_max - (min(20, int) + 15 * (int - min(20, int)))
 
-	local _, i, ability, spellId, cost
 	-- Update spell ranks first
 	for _, ability in next, abilities.all do
 		ability.known = false
@@ -1054,7 +1044,6 @@ function Player:Update()
 
 	trackAuras:Purge()
 	if Opt.auto_aoe then
-		local ability
 		for _, ability in next, abilities.autoAoe do
 			ability:UpdateTargetsHit()
 		end
@@ -1090,7 +1079,6 @@ function Target:Update()
 		self.player = false
 		self.level = Player.level
 		self.hostile = true
-		local i
 		for i = 1, 25 do
 			self.health_array[i] = 0
 		end
@@ -1107,7 +1095,6 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
-		local i
 		for i = 1, 25 do
 			self.health_array[i] = UnitHealth('target')
 		end
@@ -1278,7 +1265,7 @@ end
 hooksecurefunc('ActionButton_ShowOverlayGlow', UI.DenyOverlayGlow) -- Disable Blizzard's built-in action button glowing
 
 function UI:UpdateGlowColorAndScale()
-	local w, h, glow, i
+	local w, h, glow
 	local r = Opt.glow.color.r
 	local g = Opt.glow.color.g
 	local b = Opt.glow.color.b
@@ -1298,7 +1285,6 @@ function UI:UpdateGlowColorAndScale()
 end
 
 function UI:CreateOverlayGlows()
-	local b, i
 	local GenerateGlow = function(button)
 		if button then
 			local glow = CreateFrame('Frame', nil, button, 'ActionBarButtonSpellActivationAlert')
@@ -1347,7 +1333,7 @@ function UI:CreateOverlayGlows()
 end
 
 function UI:UpdateGlows()
-	local glow, icon, i
+	local glow, icon
 	for i = 1, #self.glows do
 		glow = self.glows[i]
 		icon = glow.button.icon:GetTexture()
@@ -1641,7 +1627,6 @@ function events:PLAYER_REGEN_ENABLED()
 		Player.last_ability = nil
 		retardedPreviousPanel:Hide()
 	end
-	local _, ability, guid
 	for _, ability in next, abilities.velocity do
 		for guid in next, ability.traveling do
 			ability.traveling[guid] = nil
@@ -1660,7 +1645,7 @@ function events:PLAYER_REGEN_ENABLED()
 end
 
 function events:PLAYER_EQUIPMENT_CHANGED()
-	local _, i, equipType, hasCooldown
+	local equipType, hasCooldown
 	Trinket1.itemId = GetInventoryItemID('player', 13) or 0
 	Trinket2.itemId = GetInventoryItemID('player', 14) or 0
 	for _, i in next, Trinket do -- use custom APL lines for these trinkets
@@ -1780,7 +1765,6 @@ retardedPanel:SetScript('OnUpdate', function(self, elapsed)
 end)
 
 retardedPanel:SetScript('OnEvent', function(self, event, ...) events[event](self, ...) end)
-local event
 for event in next, events do
 	retardedPanel:RegisterEvent(event)
 end
@@ -2024,7 +2008,6 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		return Status('Position has been reset to', 'default')
 	end
 	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
-	local _, cmd
 	for _, cmd in next, {
 		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
 		'scale |cFFFFD000prev|r/|cFFFFD000main|r/|cFFFFD000cd|r/|cFFFFD000interrupt|r/|cFFFFD000extra|r/|cFFFFD000glow|r - adjust the scale of the ' .. ADDON .. ' UI icons',
