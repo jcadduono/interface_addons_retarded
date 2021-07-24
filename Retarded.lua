@@ -97,6 +97,8 @@ local function InitOpts()
 		cd_ttd = 8,
 		pot = false,
 		trinket = true,
+		last_aura = false,
+		last_blessing = false,
 	})
 end
 
@@ -141,6 +143,9 @@ local Player = {
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
 	},
+	tanking = false,
+	last_aura = false,
+	last_blessing = false,
 }
 
 -- current target information
@@ -397,6 +402,7 @@ function Ability:Add(spellId, buff, player)
 		spellIds = type(spellId) == 'table' and spellId or { spellId },
 		spellId = 0,
 		name = false,
+		rank = 0,
 		icon = false,
 		requires_charge = false,
 		triggers_combat = false,
@@ -787,21 +793,52 @@ end
 ---- General
 
 ---- Holy
-
+local BlessingOfWisdom = Ability:Add({19742, 19850, 19852, 19853, 19854, 25290, 27142}, true)
+BlessingOfWisdom.mana_costs = {30, 45, 65, 90, 115, 125, 150}
+BlessingOfWisdom.buff_duration = 600
+BlessingOfWisdom.is_blessing = true
+local Consecration = Ability:Add({26573, 20116, 20922, 20923, 20924, 27173}, false, true)
+Consecration.mana_costs = {120, 205, 290, 390, 505, 660}
+Consecration.cooldown_duration = 8
+Consecration.tick_interval = 1
+Consecration:AutoAoe()
+local Exorcism = Ability:Add({879, 5614, 5615, 10312, 10313, 10314, 27138}, false, true)
+Exorcism.mana_costs = {70, 115, 155, 200, 240, 295, 340}
+Exorcism.cooldown_duration = 15
+local HolyLight = Ability:Add({635, 639, 647, 1026, 1042, 3472, 10328, 10329, 25292}, false, true)
+HolyLight.mana_costs = {35, 60, 110, 190, 275, 365, 465, 580, 660}
+local SealOfRighteousness = Ability:Add({21084, 20287, 20288, 20289, 20290, 20291, 20292, 20293}, true, true)
+SealOfRighteousness.mana_costs = {20, 40, 60, 90, 120, 140, 170, 200}
+SealOfRighteousness.buff_duration = 30
 ------ Talents
 
 ------ Procs
 
 ---- Protection
-
+local DevotionAura = Ability:Add({465, 10290, 643, 10291, 1032, 10292, 10293}, true)
+DevotionAura.is_aura = true
+local HammerOfJustice = Ability:Add({853, 5588, 5589, 10308}, false)
+HammerOfJustice.mana_costs = {30, 50, 75, 100}
+HammerOfJustice.buff_duration = 3
+local RighteousFury = Ability:Add({25780}, true, true)
+RighteousFury.mana_cost_pct = 24
+RighteousFury.buff_duration = 1800
 ------ Talents
-
+local ImprovedRighteousFury = Ability:Add({20468, 20469, 20470}, true, true)
 ------ Procs
 
 ---- Retribution
-
+local BlessingOfMight = Ability:Add({19740, 19834, 19835, 19836, 19837, 19838, 25291}, true)
+BlessingOfMight.mana_costs = {20, 30, 45, 60, 85, 110, 130}
+BlessingOfMight.buff_duration = 600
+BlessingOfMight.is_blessing = true
+local Judgement = Ability:Add({20271}, false, true)
+Judgement.mana_cost_pct = 5
+Judgement.cooldown_duration = 10
+local RetributionAura = Ability:Add({7294, 10298, 10299, 10300, 10301, 27150}, true)
+RetributionAura.is_aura = true
 ------ Talents
-
+local Benediction = Ability:Add({20101, 20102, 20103, 20104, 20105}, true, true)
 ------ Procs
 
 -- Racials
@@ -924,32 +961,47 @@ end
 
 function Player:UpdateAbilities()
 	local int = UnitStat('player', 4)
-	Player.mana_base = Player.mana_max - min(20, int) + 15 * (int - min(20, int))
+	self.mana_max = UnitPowerMax('player', 0)
+	self.mana_base = self.mana_max - (min(20, int) + 15 * (int - min(20, int)))
 
 	local _, i, ability, spellId, cost
 	-- Update spell ranks first
 	for _, ability in next, abilities.all do
 		ability.known = false
 		ability.spellId = ability.spellIds[1]
+		ability.rank = 1
 		for i, spellId in next, ability.spellIds do
 			if IsPlayerSpell(spellId) then
-				ability.spellId = spellId -- update spellId to current rank
 				ability.known = true
+				ability.spellId = spellId -- update spellId to current rank
+				ability.rank = i
 				if ability.mana_costs then
 					ability.mana_cost = ability.mana_costs[i] -- update mana_cost to current rank
 				end
 				if ability.mana_cost_pct then
-					ability.mana_cost = floor(Player.mana_base * (ability.mana_cost_pct / 100))
+					ability.mana_cost = floor(self.mana_base * (ability.mana_cost_pct / 100))
 				end
 				if ability.health_costs then
 					ability.health_cost = ability.health_costs[i] -- update health_cost to current rank
 				end
+			end
+			if Opt.last_aura == spellId then
+				self.last_aura = ability
+			end
+			if Opt.last_blessing == spellId then
+				self.last_blessing = ability
 			end
 		end
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
 	
 	-- Mark specific spells as known if they can be triggered by others
+	if self.last_aura then
+		Opt.last_aura = self.last_aura.spellId
+	end
+	if self.last_blessing then
+		Opt.last_blessing = self.last_blessing.spellId
+	end
 
 	abilities.bySpellId = {}
 	abilities.velocity = {}
@@ -1087,6 +1139,36 @@ end
 
 -- Start Ability Modifications
 
+function Exorcism:Usable(seconds)
+	if not (Target.type == 'Undead' or Target.type == 'Demon') then
+		return false
+	end
+	return Ability.Usable(self, seconds)
+end
+
+function HammerOfJustice:Usable(seconds)
+	if not Target.stunnable then
+		return false
+	end
+	return Ability.Usable(self, seconds)
+end
+
+function Judgement:Usable(seconds)
+	if SealOfRighteousness:Down() then
+		return false
+	end
+	return Ability.Usable(self, seconds)
+end
+
+function Judgement:Cost()
+	local cost = Ability.Cost(self)
+	if Benediction.known then
+		cost = floor(cost - (cost * 0.03 * Benediction.rank))
+	end
+	return cost
+end
+SealOfRighteousness.Cost = Judgement.Cost
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1106,13 +1188,82 @@ end
 local APL = {}
 
 APL.Main = function(self)
+	local apl
+	if HolyLight:Usable() and Player:HealthPct() < 40 then
+		UseExtra(HolyLight)
+	end
 	if Player:TimeInCombat() == 0 then
+		if Player.tanking and (Player.group_size > 1 or ImprovedRighteousFury.known) and RighteousFury:Usable() and RighteousFury:Remains() < (Target.boss and 180 or 30) then
+			return RighteousFury
+		end
+		apl = self:Auras() or self:Blessings(Target.boss and 180 or 30)
+		if apl then return apl end
+		if SealOfRighteousness:Usable() and SealOfRighteousness:Down() then
+			return SealOfRighteousness
+		end
+		if Exorcism:Usable() then
+			return Exorcism
+		end
+	else
+		if Player.tanking and (Player.group_size > 1 or ImprovedRighteousFury.known) and RighteousFury:Usable() and RighteousFury:Down() then
+			UseExtra(RighteousFury)
+		end
+		apl = self:Auras() or self:Blessings(30)
+		if apl then UseExtra(apl) end
+	end
+	if Judgement:Usable() then
+		return Judgement
+	end
+	if SealOfRighteousness:Usable() and SealOfRighteousness:Down() then
+		return SealOfRighteousness
+	end
+	if Consecration:Usable() and Player.enemies > 1 then
+		return Consecration
+	end
+	if Exorcism:Usable() then
+		return Exorcism
+	end
+end
 
+APL.Auras = function(self)
+	if DevotionAura:Up(true) or RetributionAura:Up(true) then
+		return
+	end
+	if Player.last_aura and Player.last_aura:Usable() and Player.last_aura:Down() then
+		return Player.last_aura
+	end
+	if DevotionAura:Usable() then
+		return DevotionAura
+	end
+	if RetributionAura:Usable() then
+		return RetributionAura
+	end
+end
+
+APL.Blessings = function(self, refresh_time)
+	if Player.last_blessing then
+		if Player.last_blessing:Remains(true) > refresh_time then
+			return
+		end
+		if Player.last_blessing:Usable() and Player.last_blessing:Remains() <= refresh_time then
+			return Player.last_blessing
+		end
+	end
+	if BlessingOfMight:Remains(true) > refresh_time or BlessingOfWisdom:Remains(true) > refresh_time then
+		return
+	end
+	if BlessingOfMight:Usable() then
+		return BlessingOfMight
+	end
+	if BlessingOfWisdom:Usable() then
+		return BlessingOfWisdom
 	end
 end
 
 APL.Interrupt = function(self)
-
+	if HammerOfJustice:Usable() then
+		return HammerOfJustice
+	end
 end
 
 -- End Action Priority Lists
@@ -1425,6 +1576,16 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 		return
 	end
 	if dstGUID == Player.guid then
+		if eventType == 'SPELL_AURA_APPLIED' or eventType == 'SPELL_AURA_REFRESH' then
+			if ability.is_aura then
+				Player.last_aura = ability
+				Opt.last_aura = ability.spellId
+			end
+			if ability.is_blessing then
+				Player.last_blessing = ability
+				Opt.last_blessing = ability.spellId
+			end
+		end
 		return -- ignore buffs beyond here
 	end
 	if ability.aura_targets then
@@ -1525,6 +1686,7 @@ function events:PLAYER_EQUIPMENT_CHANGED()
 			inventoryItems[i].can_use = false
 		end
 	end
+	Player.tanking = IsEquippedItemType('INVTYPE_SHIELD')
 	Player:UpdateAbilities()
 end
 
