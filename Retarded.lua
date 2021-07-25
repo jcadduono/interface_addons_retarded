@@ -1259,6 +1259,12 @@ APL.Main = function(self)
 		apl = self:Auras() or self:Blessings(30)
 		if apl then UseExtra(apl) end
 	end
+	if Consecration:Usable() and Player.enemies > 2 then
+		return Consecration
+	end
+	if Exorcism:Usable() then
+		return Exorcism
+	end
 	if Judgement:Usable() and Player.mana >= (Judgement:Cost() + (Player.last_seal and Player.last_seal:Cost() or 0)) then
 		return Judgement
 	end
@@ -1266,9 +1272,6 @@ APL.Main = function(self)
 	if apl then return apl end
 	if Consecration:Usable() and Player.enemies > 1 then
 		return Consecration
-	end
-	if Exorcism:Usable() then
-		return Exorcism
 	end
 end
 
