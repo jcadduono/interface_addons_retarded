@@ -98,6 +98,7 @@ local function InitOpts()
 		trinket = true,
 		last_aura = false,
 		last_blessing = false,
+		last_seal = false,
 	})
 end
 
@@ -145,6 +146,7 @@ local Player = {
 	tanking = false,
 	last_aura = false,
 	last_blessing = false,
+	last_seal = false,
 }
 
 -- current target information
@@ -799,9 +801,18 @@ Exorcism.mana_costs = {70, 115, 155, 200, 240, 295, 340}
 Exorcism.cooldown_duration = 15
 local HolyLight = Ability:Add({635, 639, 647, 1026, 1042, 3472, 10328, 10329, 25292}, false, true)
 HolyLight.mana_costs = {35, 60, 110, 190, 275, 365, 465, 580, 660}
+local SealOfLight = Ability:Add({20165, 20347, 20348, 20349, 27160}, true, true)
+SealOfLight.mana_costs = {110, 140, 180, 210, 280}
+SealOfLight.buff_duration = 30
+SealOfLight.is_seal = true
 local SealOfRighteousness = Ability:Add({21084, 20287, 20288, 20289, 20290, 20291, 20292, 20293}, true, true)
 SealOfRighteousness.mana_costs = {20, 40, 60, 90, 120, 140, 170, 200}
 SealOfRighteousness.buff_duration = 30
+SealOfRighteousness.is_seal = true
+local SealOfWisdom = Ability:Add({20166, 20356, 20357, 27166}, true, true)
+SealOfWisdom.mana_costs = {135, 170, 200, 270}
+SealOfWisdom.buff_duration = 30
+SealOfWisdom.is_seal = true
 ------ Talents
 
 ------ Procs
@@ -815,7 +826,17 @@ HammerOfJustice.buff_duration = 3
 local RighteousFury = Ability:Add({25780}, true, true)
 RighteousFury.mana_cost_pct = 24
 RighteousFury.buff_duration = 1800
+local SealOfJustice = Ability:Add({20164}, true, true)
+SealOfJustice.mana_cost_pct = 10
+SealOfJustice.buff_duration = 30
+SealOfJustice.is_seal = true
+SealOfJustice.stun = Ability:Add({20170}, false, true)
+SealOfJustice.stun.buff_duration = 2
 ------ Talents
+local BlessingOfKings = Ability:Add({20217}, true)
+BlessingOfKings.mana_cost_pct = 6
+BlessingOfKings.buff_duration = 600
+BlessingOfKings.is_blessing = true
 local ImprovedRighteousFury = Ability:Add({20468, 20469, 20470}, true, true)
 ------ Procs
 
@@ -829,8 +850,36 @@ Judgement.mana_cost_pct = 5
 Judgement.cooldown_duration = 10
 local RetributionAura = Ability:Add({7294, 10298, 10299, 10300, 10301, 27150}, true)
 RetributionAura.is_aura = true
+local SealOfBlood = Ability:Add({31892}, true, true) -- Blood Elf
+SealOfBlood.mana_costs = {210}
+SealOfBlood.buff_duration = 30
+SealOfBlood.is_seal = true
+local SealOfCorruption = Ability:Add({348704}, true, true) -- Blood Elf
+SealOfCorruption.mana_costs = {250}
+SealOfCorruption.buff_duration = 30
+SealOfCorruption.is_seal = true
+SealOfCorruption.dot = Ability:Add({356110}, false, true)
+SealOfCorruption.dot.buff_duration = 15
+local SealOfTheCrusader = Ability:Add({21082, 20162, 20305, 20306, 20307, 20308, 27158}, true, true)
+SealOfTheCrusader.mana_costs = {25, 40, 65, 90, 125, 160, 210}
+SealOfTheCrusader.buff_duration = 30
+SealOfTheCrusader.is_seal = true
+local SealOfTheMartyr = Ability:Add({348700}, true, true) -- Draenei, Dwarf, Human
+SealOfTheMartyr.mana_costs = {210}
+SealOfTheMartyr.buff_duration = 30
+SealOfTheMartyr.is_seal = true
+local SealOfVengeance = Ability:Add({31801}, true, true) -- Draenei, Dwarf, Human
+SealOfVengeance.mana_costs = {250}
+SealOfVengeance.buff_duration = 30
+SealOfVengeance.is_seal = true
+SealOfVengeance.dot = Ability:Add({31803}, false, true)
+SealOfVengeance.dot.buff_duration = 15
 ------ Talents
 local Benediction = Ability:Add({20101, 20102, 20103, 20104, 20105}, true, true)
+local SealOfCommand = Ability:Add({20375, 20915, 20918, 20919, 20920, 27170}, true, true)
+SealOfCommand.mana_costs = {65, 110, 140, 180, 210, 280}
+SealOfCommand.buff_duration = 30
+SealOfCommand.is_seal = true
 ------ Procs
 
 -- Racials
@@ -981,6 +1030,9 @@ function Player:UpdateAbilities()
 			if Opt.last_blessing == spellId then
 				self.last_blessing = ability
 			end
+			if Opt.last_seal == spellId then
+				self.last_seal = ability
+			end
 		end
 		ability.name, _, ability.icon = GetSpellInfo(ability.spellId)
 	end
@@ -991,6 +1043,9 @@ function Player:UpdateAbilities()
 	end
 	if self.last_blessing then
 		Opt.last_blessing = self.last_blessing.spellId
+	end
+	if self.last_seal then
+		Opt.last_seal = self.last_seal.spellId
 	end
 
 	abilities.bySpellId = {}
@@ -1141,7 +1196,7 @@ function HammerOfJustice:Usable(seconds)
 end
 
 function Judgement:Usable(seconds)
-	if SealOfRighteousness:Down() then
+	if not (Player.last_seal:Up() or SealOfRighteousness:Up() or SealOfVengeance:Up() or SealOfCorruption:Up() or SealOfWisdom:Up() or SealOfLight:Up() or SealOfTheCrusader:Up() or SealOfCommand:Up() or SealOfJustice:Up() or SealOfTheMartyr:Up() or SealOfBlood:Up()) then
 		return false
 	end
 	return Ability.Usable(self, seconds)
@@ -1154,7 +1209,16 @@ function Judgement:Cost()
 	end
 	return cost
 end
+
 SealOfRighteousness.Cost = Judgement.Cost
+SealOfVengeance.Cost = Judgement.Cost
+SealOfCorruption.Cost = Judgement.Cost
+SealOfWisdom.Cost = Judgement.Cost
+SealOfLight.Cost = Judgement.Cost
+SealOfTheCrusader.Cost = Judgement.Cost
+SealOfCommand.Cost = Judgement.Cost
+SealOfJustice.Cost = Judgement.Cost
+SealOfTheMartyr.Cost = Judgement.Cost
 
 -- End Ability Modifications
 
@@ -1183,11 +1247,8 @@ APL.Main = function(self)
 		if Player.tanking and (Player.group_size > 1 or ImprovedRighteousFury.known) and RighteousFury:Usable() and RighteousFury:Remains() < (Target.boss and 180 or 30) then
 			return RighteousFury
 		end
-		apl = self:Auras() or self:Blessings(Target.boss and 180 or 30)
+		apl = self:Auras() or self:Blessings(Target.boss and 180 or 30) or self:Seals()
 		if apl then return apl end
-		if SealOfRighteousness:Usable() and SealOfRighteousness:Down() then
-			return SealOfRighteousness
-		end
 		if Exorcism:Usable() then
 			return Exorcism
 		end
@@ -1198,12 +1259,11 @@ APL.Main = function(self)
 		apl = self:Auras() or self:Blessings(30)
 		if apl then UseExtra(apl) end
 	end
-	if Judgement:Usable() then
+	if Judgement:Usable() and Player.mana >= (Judgement:Cost() + (Player.last_seal and Player.last_seal:Cost() or 0)) then
 		return Judgement
 	end
-	if SealOfRighteousness:Usable() and SealOfRighteousness:Down() then
-		return SealOfRighteousness
-	end
+	apl = self:Seals()
+	if apl then return apl end
 	if Consecration:Usable() and Player.enemies > 1 then
 		return Consecration
 	end
@@ -1213,11 +1273,16 @@ APL.Main = function(self)
 end
 
 APL.Auras = function(self)
+	if Player.last_aura then
+		if Player.last_aura:Up() then
+			return
+		end
+		if Player.last_aura:Usable() then
+			return Player.last_aura
+		end
+	end
 	if DevotionAura:Up(true) or RetributionAura:Up(true) then
 		return
-	end
-	if Player.last_aura and Player.last_aura:Usable() and Player.last_aura:Down() then
-		return Player.last_aura
 	end
 	if DevotionAura:Usable() then
 		return DevotionAura
@@ -1236,7 +1301,7 @@ APL.Blessings = function(self, refresh_time)
 			return Player.last_blessing
 		end
 	end
-	if BlessingOfMight:Remains(true) > refresh_time or BlessingOfWisdom:Remains(true) > refresh_time then
+	if BlessingOfMight:Remains(true) > refresh_time or BlessingOfWisdom:Remains(true) > refresh_time or BlessingOfKings:Remains(true) > refresh_time then
 		return
 	end
 	if BlessingOfMight:Usable() then
@@ -1244,6 +1309,32 @@ APL.Blessings = function(self, refresh_time)
 	end
 	if BlessingOfWisdom:Usable() then
 		return BlessingOfWisdom
+	end
+	if BlessingOfKings:Usable() then
+		return BlessingOfKings
+	end
+end
+
+APL.Seals = function(self)
+	if Player.last_seal then
+		if Player.last_seal:Up() then
+			return
+		end
+		if Player.last_seal:Usable() then
+			return Player.last_seal
+		end
+	end
+	if SealOfRighteousness:Up() or SealOfVengeance:Up() or SealOfCorruption:Up() or SealOfWisdom:Up() or SealOfLight:Up() or SealOfTheCrusader:Up() or SealOfCommand:Up() or SealOfJustice:Up() or SealOfTheMartyr:Up() or SealOfBlood:Up() then
+		return
+	end
+	if SealOfRighteousness:Usable() then
+		return SealOfRighteousness
+	end
+	if SealOfVengeance:Usable() then
+		return SealOfVengeance
+	end
+	if SealOfCorruption:Usable() then
+		return SealOfCorruption
 	end
 end
 
@@ -1566,10 +1657,12 @@ function events:COMBAT_LOG_EVENT_UNFILTERED()
 			if ability.is_aura then
 				Player.last_aura = ability
 				Opt.last_aura = ability.spellId
-			end
-			if ability.is_blessing then
+			elseif ability.is_blessing then
 				Player.last_blessing = ability
 				Opt.last_blessing = ability.spellId
+			elseif ability.is_seal then
+				Player.last_seal = ability
+				Opt.last_seal = ability.spellId
 			end
 		end
 		return -- ignore buffs beyond here
