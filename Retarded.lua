@@ -1287,10 +1287,10 @@ APL.Auras = function(self)
 	if DevotionAura:Up(true) or RetributionAura:Up(true) then
 		return
 	end
-	if DevotionAura:Usable() then
+	if DevotionAura:Usable() and DevotionAura:Down() then
 		return DevotionAura
 	end
-	if RetributionAura:Usable() then
+	if RetributionAura:Usable() and RetributionAura:Down() then
 		return RetributionAura
 	end
 end
@@ -1307,13 +1307,13 @@ APL.Blessings = function(self, refresh_time)
 	if BlessingOfMight:Remains(true) > refresh_time or BlessingOfWisdom:Remains(true) > refresh_time or BlessingOfKings:Remains(true) > refresh_time then
 		return
 	end
-	if BlessingOfMight:Usable() then
+	if BlessingOfMight:Usable() and BlessingOfMight:Down() then
 		return BlessingOfMight
 	end
-	if BlessingOfWisdom:Usable() then
+	if BlessingOfWisdom:Usable() and BlessingOfWisdom:Down() then
 		return BlessingOfWisdom
 	end
-	if BlessingOfKings:Usable() then
+	if BlessingOfKings:Usable() and BlessingOfKings:Down() then
 		return BlessingOfKings
 	end
 end
