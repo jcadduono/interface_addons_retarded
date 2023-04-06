@@ -939,7 +939,7 @@ local FlashOfLight = Ability:Add(19750, true, true)
 FlashOfLight.mana_cost = 22
 local Forbearance = Ability:Add(25771, false, false)
 Forbearance.buff_duration = 30
-Forbearance.auraTarget = 'player'
+Forbearance.aura_target = 'player'
 local HandOfReckoning = Ability:Add(62124, false, true)
 HandOfReckoning.mana_cost = 3
 HandOfReckoning.buff_duration = 3
@@ -966,6 +966,8 @@ BlindingLight.buff_duration = 6
 BlindingLight.cooldown_duration = 90
 local CrusaderAura = Ability:Add(32223, true, false)
 local DevotionAura = Ability:Add(465, true, false)
+local DivinePurpose = Ability:Add(408459, true, true, 408458)
+DivinePurpose.buff_duration = 12
 local DivineResonance = Ability:Add(384027, true, true, 384029)
 DivineResonance.buff_duration = 15
 DivineResonance.tick_interval = 5
@@ -1490,6 +1492,13 @@ end
 -- End Target API
 
 -- Start Ability Modifications
+
+function Ability:HolyPowerCost()
+	if DivinePurpose.known and DivinePurpose:Up() then
+		return 0
+	end
+	return self.holy_power_cost
+end
 
 function DivineStorm:HolyPowerCost()
 	if EmpyreanPower.known and EmpyreanPower:Up() then
