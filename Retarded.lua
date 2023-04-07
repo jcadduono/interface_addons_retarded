@@ -1896,11 +1896,11 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() then
 		return TemplarSlash
 	end
-	if TemplarStrike:Usable() then
-		return TemplarStrike
-	end
 	if Judgment:Usable() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
 		return Judgment
+	end
+	if TemplarStrike:Usable() then
+		return TemplarStrike
 	end
 	if HammerOfWrath:Usable() and (Player.holy_power.current <= 3 or Target.health.pct > 20 or not VanguardsMomentum.known) then
 		return HammerOfWrath
