@@ -1075,7 +1075,11 @@ TemplarsVerdict.holy_power_cost = 3
 local TemplarStrikes = Ability:Add(406646, false, true)
 local TemplarStrike = Ability:Add(407480, false, true)
 TemplarStrike.mana_cost = 2
+TemplarStrike.cooldown_duration = 6
+TemplarStrike.requires_charge = true
+TemplarStrike.hasted_cooldown = true
 local TemplarSlash = Ability:Add(406647, false, true)
+TemplarSlash.buff_duration = 4
 TemplarSlash.mana_cost = 2
 local VanguardsMomentum = Ability:Add(383314, false, true)
 local WakeOfAshes = Ability:Add(255937, false, true, 255941)
@@ -1533,6 +1537,28 @@ function DivineShield:Usable()
 end
 LayOnHands.Usable = DivineShield.Usable
 BlessingOfProtection.Usable = DivineShield.Usable
+
+function TemplarSlash:Available()
+	return self.activation_time and (Player.time + Player.execute_remains - self.activation_time) < self.buff_duration
+end
+
+function TemplarSlash:Usable()
+	return self:Available() and Ability.Usable(self)
+end
+
+function TemplarSlash:CastSuccess(...)
+	self.activation_time = nil
+	Ability.CastSuccess(self, ...)
+end
+
+function TemplarStrike:Usable()
+	return not TemplarSlash:Available() and Ability.Usable(self)
+end
+
+function TemplarStrike:CastSuccess(...)
+	TemplarSlash.activation_time = Player.time
+	Ability.CastSuccess(self, ...)
+end
 
 -- End Ability Modifications
 
