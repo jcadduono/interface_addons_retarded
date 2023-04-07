@@ -1082,6 +1082,7 @@ local TemplarSlash = Ability:Add(406647, false, true)
 TemplarSlash.buff_duration = 4
 TemplarSlash.mana_cost = 2
 local VanguardsMomentum = Ability:Add(383314, false, true)
+local VanguardOfJustice = Ability:Add(406545, false, true)
 local WakeOfAshes = Ability:Add(255937, false, true, 255941)
 WakeOfAshes.buff_duration = 5
 WakeOfAshes.cooldown_duration = 30
@@ -1504,11 +1505,23 @@ function Ability:HolyPowerCost()
 	return self.holy_power_cost
 end
 
+function TemplarsVerdict:HolyPowerCost()
+	if DivinePurpose.known and DivinePurpose:Up() then
+		return 0
+	end
+	if VanguardOfJustice.known then
+		return self.holy_power_cost + 1
+	end
+	return self.holy_power_cost
+end
+FinalVerdict.HolyPowerCost = TemplarsVerdict.HolyPowerCost
+JusticarsVengeance.HolyPowerCost = TemplarsVerdict.HolyPowerCost
+
 function DivineStorm:HolyPowerCost()
 	if EmpyreanPower.known and EmpyreanPower:Up() then
 		return 0
 	end
-	return Ability.HolyPowerCost(self)
+	return TemplarsVerdict.HolyPowerCost(self)
 end
 
 function HammerOfJustice:Usable()
