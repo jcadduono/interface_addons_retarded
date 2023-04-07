@@ -1647,6 +1647,8 @@ APL[SPEC.RETRIBUTION].Main = function(self)
 		end
 		if Player.movement_speed < 75 and BlessingOfFreedom:Usable() and not Player:Dazed() then
 			UseExtra(BlessingOfFreedom)
+		elseif ShieldOfVengeance:Usable() and ShieldOfVengeance:Down() and Player:UnderAttack() then
+			UseExtra(ShieldOfVengeance)
 		end
 	end
 	if Opt.auras and not Player.aura then
@@ -1687,7 +1689,9 @@ actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
-	self:cooldowns()
+	if self.use_cds then
+		self:cooldowns()
+	end
 	return self:generators()
 end
 
@@ -1707,12 +1711,6 @@ actions.cooldowns+=/crusade,if=buff.crusade.down&(holy_power>=5&time<5|holy_powe
 actions.cooldowns+=/execution_sentence,if=(!buff.crusade.up&cooldown.crusade.remains>10|buff.crusade.stack=10|cooldown.avenging_wrath.remains>10)&(holy_power>=3|holy_power>=2&talent.divine_auxiliary)&target.time_to_die>8
 actions.cooldowns+=/final_reckoning,if=(holy_power>=4&time<8|holy_power>=3&time>=8|holy_power>=2&talent.divine_auxiliary)&(cooldown.avenging_wrath.remains>gcd|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(time_to_hpg>0|holy_power=5|holy_power>=2&talent.divine_auxiliary)&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
-	if ShieldOfVengeance:Usable() and ShieldOfVengeance:Down() and Player:UnderAttack() then
-		return UseCooldown(ShieldOfVengeance)
-	end
-	if not self.use_cds then
-		return
-	end
 	if AvengingWrath:Usable() and AvengingWrath:Down() and (
 		(Player:TimeInCombat() < 5 and Player.holy_power.current >= 4) or
 		(Player:TimeInCombat() > 5 and Player.holy_power.current >= 3) or
