@@ -1729,6 +1729,7 @@ actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
+	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
 	if self.use_cds then
 		self:cooldowns()
 	end
@@ -1792,6 +1793,7 @@ actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remain
 	self.ds_castable = Player.enemies >= 2 or (EmpyreanPower.known and EmpyreanPower:Up())
 	self.use_finisher = (
 		not self.use_cds or
+		self.dp_ending or
 		(not Crusade.known or not Crusade:Ready(Player.gcd * 3)) and
 		(not ExecutionSentence.known or DivineAuxiliary.known or Target.timeToDie < 8 or not ExecutionSentence:Ready(Player.gcd * 2)) and
 		(not FinalReckoning.known or DivineAuxiliary.known or not FinalReckoning:Ready(Player.gcd * 2)) or
@@ -1840,7 +1842,7 @@ actions.generators+=/arcane_torrent
 actions.generators+=/consecration
 actions.generators+=/divine_hammer
 ]]
-	if Player.holy_power.current >= 5 or ((Judgment:Up() or Player.holy_power.current >= 4) and DivineResonance:Up()) then
+	if Player.holy_power.current >= 5 or self.dp_ending or ((Judgment:Up() or Player.holy_power.current >= 4) and DivineResonance:Up()) then
 		local apl = self:finishers()
 		if apl then return apl end
 	end
