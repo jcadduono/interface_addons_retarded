@@ -931,6 +931,7 @@ Consecration.damage.cooldown_duration = 9
 Consecration.damage.buff_duration = 12
 Consecration.damage.tick_interval = 1
 Consecration.damage.hasted_ticks = true
+Consecration.damage.ignore_immune = true
 Consecration.damage:AutoAoe()
 local CrusaderStrike = Ability:Add(35395, false, true)
 CrusaderStrike.mana_cost = 10
@@ -2394,7 +2395,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 		return -- ignore buffs beyond here
 	end
 	if Opt.auto_aoe then
-		if event == 'SPELL_MISSED' and (missType == 'EVADE' or missType == 'IMMUNE') then
+		if event == 'SPELL_MISSED' and (missType == 'EVADE' or (missType == 'IMMUNE' and not ability.ignore_immune)) then
 			autoAoe:Remove(dstGUID)
 		elseif ability.auto_aoe and (event == ability.auto_aoe.trigger or ability.auto_aoe.trigger == 'SPELL_AURA_APPLIED' and event == 'SPELL_AURA_REFRESH') then
 			ability:RecordTargetHit(dstGUID)
