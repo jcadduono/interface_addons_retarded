@@ -1087,6 +1087,7 @@ local VanguardOfJustice = Ability:Add(406545, false, true)
 local WakeOfAshes = Ability:Add(255937, false, true, 255941)
 WakeOfAshes.buff_duration = 5
 WakeOfAshes.cooldown_duration = 30
+WakeOfAshes.ignore_immune = true
 WakeOfAshes:AutoAoe()
 ------ Procs
 
