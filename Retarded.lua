@@ -1796,6 +1796,7 @@ actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remain
 	self.use_finisher = (
 		not self.use_cds or
 		self.dp_ending or
+		Target.timeToDie < Player.gcd or
 		(not Crusade.known or not Crusade:Ready(Player.gcd * 3)) and
 		(not ExecutionSentence.known or DivineAuxiliary.known or Target.timeToDie < 8 or not ExecutionSentence:Ready(Player.gcd * 2)) and
 		(not FinalReckoning.known or DivineAuxiliary.known or not FinalReckoning:Ready(Player.gcd * 2)) or
