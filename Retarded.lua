@@ -857,6 +857,9 @@ end
 
 function Ability:CastSuccess(dstGUID)
 	self.last_used = Player.time
+	if self.ignore_cast then
+		return
+	end
 	Player.last_ability = self
 	if self.triggers_gcd then
 		Player.previous_gcd[10] = nil
@@ -1119,6 +1122,9 @@ Crusade.cooldown_duration = 120
 Crusade.triggers_gcd = false
 Crusade.off_gcd = true
 local CrusadingStrikes = Ability:Add(404542, false, true, 408385)
+CrusadingStrikes.triggers_gcd = false
+CrusadingStrikes.off_gcd = true
+CrusadingStrikes.ignore_cast = true
 local CrusaderStrike = Ability:Add(35395, false, true)
 CrusaderStrike.cooldown_duration = 6
 CrusaderStrike.hasted_cooldown = true
