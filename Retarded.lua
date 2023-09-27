@@ -1987,7 +1987,7 @@ end
 APL[SPEC.RETRIBUTION].generators = function(self)
 --[[
 actions.generators=call_action_list,name=finishers,if=holy_power=5|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up
-actions.generators+=/wake_of_ashes,if=holy_power<=2&(cooldown.avenging_wrath.remains|cooldown.crusade.remains)&(!talent.execution_sentence|cooldown.execution_sentence.remains>4|target.time_to_die<8)&(!raid_event.adds.exists|raid_event.adds.in>20|raid_event.adds.up)
+actions.generators+=/wake_of_ashes,if=holy_power<=2&(cooldown.avenging_wrath.remains|cooldown.crusade.remains)&(!talent.execution_sentence|cooldown.execution_sentence.remains>4|target.time_to_die<8)&(!talent.final_reckoning|cooldown.final_reckoning.remains>4|target.time_to_die<8)&(!raid_event.adds.exists|raid_event.adds.in>20|raid_event.adds.up)
 actions.generators+=/divine_toll,if=holy_power<=2&!debuff.judgment.up&(!raid_event.adds.exists|raid_event.adds.in>30|raid_event.adds.up)&(cooldown.avenging_wrath.remains>15|cooldown.crusade.remains>15|fight_remains<8)
 actions.generators+=/call_action_list,name=finishers,if=holy_power>=3&buff.crusade.up&buff.crusade.stack<10
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd&spell_targets.divine_storm>=2
@@ -2015,7 +2015,13 @@ actions.generators+=/divine_hammer
 		local apl = self:finishers()
 		if apl then return apl end
 	end
-	if WakeOfAshes:Usable() and Player.holy_power.current <= 2 and (not self.use_cds or Player.major_cd_remains > 0 or (Target.boss and Target.timeToDie < 10) or (AvengingWrath.known and not AvengingWrath:Ready(15)) or (Crusade.known and not Crusade:Ready(5))) and (not ExecutionSentence.known or not ExecutionSentence:Ready(4) or Target.timeToDie < 8) then
+	if WakeOfAshes:Usable() and Player.holy_power.current <= 2 and (not ExecutionSentence.known or not ExecutionSentence:Ready(4) or Target.timeToDie < 8) and (not FinalReckoning.known or not FinalReckoning:Ready(4) or not self.use_cds) and (
+		not self.use_cds or
+		Player.major_cd_remains > 0 or
+		(Target.boss and Target.timeToDie < 10) or
+		(AvengingWrath.known and not AvengingWrath:Ready(15)) or
+		(Crusade.known and not Crusade:Ready(5))
+	) then
 		UseCooldown(WakeOfAshes)
 	end
 	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and Judgment:Down() and ((AvengingWrath.known and not AvengingWrath:Ready(15)) or (Crusade.known and not Crusade:Ready(15)) or Target.timeToDie < 8) then
