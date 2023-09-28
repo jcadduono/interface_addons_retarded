@@ -1748,6 +1748,13 @@ function TemplarStrike:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 end
 
+function Judgment:Remains()
+	if Player.set_bonus.t30 >= 2 and HammerOfWrath:Traveling() > 0 then
+		return self:Duration()
+	end
+	return Ability.Remains(self)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
