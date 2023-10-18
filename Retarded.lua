@@ -546,6 +546,7 @@ function Ability:Add(spellId, buff, player, spellId2)
 		hasted_cooldown = false,
 		hasted_ticks = false,
 		known = false,
+		rank = 0,
 		mana_cost = 0,
 		holy_power_cost = 0,
 		cooldown_duration = 0,
