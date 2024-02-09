@@ -1208,8 +1208,12 @@ local WrathfulSanction = Ability:Add(424590, false, true) -- T31 2pc (Retributio
 
 -- PvP talents
 
--- Trinket Effects
-
+-- Trinket effects
+local MarkOfFyralath = Ability:Add(414532, false, true) -- DoT applied by Fyr'alath the Dreamrender
+MarkOfFyralath.buff_duration = 15
+MarkOfFyralath.tick_interval = 3
+MarkOfFyralath.hasted_ticks = true
+MarkOfFyralath.no_pandemic = true
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1282,6 +1286,8 @@ end
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
+local FyralathTheDreamrender = InventoryItem:Add(206448)
+FyralathTheDreamrender.cooldown_duration = 120
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1464,6 +1470,7 @@ function Player:UpdateKnown()
 		EchoesOfWrath.known = self.set_bonus.t31 >= 4
 		WrathfulSanction.known = self.set_bonus.t31 >= 2
 	end
+	MarkOfFyralath.known = FyralathTheDreamrender:Equipped()
 
 	Abilities:Update()
 
@@ -1941,18 +1948,22 @@ actions.cooldowns=potion,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.
 actions.cooldowns+=/invoke_external_buff,name=power_infusion,if=buff.avenging_wrath.up|buff.crusade.up
 actions.cooldowns+=/lights_judgment,if=spell_targets.lights_judgment>=2|!raid_event.adds.exists|raid_event.adds.in>75|raid_event.adds.up
 actions.cooldowns+=/fireblood,if=buff.avenging_wrath.up|buff.crusade.up&buff.crusade.stack=10
-actions.cooldowns+=/use_item,name=algethar_puzzle_box,if=(cooldown.avenging_wrath.remains<5&!talent.crusade|cooldown.crusade.remains<5&talent.crusade)&(holy_power>=5&time<5|holy_power>=3&time>5)
+actions.cooldowns+=/use_item,name=algethar_puzzle_box,if=(cooldown.avenging_wrath.remains<5&!talent.crusade|cooldown.crusade.remains<5&talent.crusade)&(holy_power>=4&time<5|holy_power>=3&time>5)
 actions.cooldowns+=/use_item,slot=trinket1,if=(buff.avenging_wrath.up&cooldown.avenging_wrath.remains>40|buff.crusade.up&buff.crusade.stack=10)&(!trinket.2.has_cooldown|trinket.2.cooldown.remains|variable.trinket_priority=1)|trinket.1.proc.any_dps.duration>=fight_remains
 actions.cooldowns+=/use_item,slot=trinket2,if=(buff.avenging_wrath.up&cooldown.avenging_wrath.remains>40|buff.crusade.up&buff.crusade.stack=10)&(!trinket.1.has_cooldown|trinket.1.cooldown.remains|variable.trinket_priority=2)|trinket.2.proc.any_dps.duration>=fight_remains
-actions.cooldowns+=/use_item,slot=trinket1,if=!variable.trinket_1_buffs&(!variable.trinket_1_manual|buff.avenging_wrath.down&buff.crusade.down)&(trinket.2.cooldown.remains|!variable.trinket_2_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
-actions.cooldowns+=/use_item,slot=trinket2,if=!variable.trinket_2_buffs&(!variable.trinket_2_manual|buff.avenging_wrath.down&buff.crusade.down)&(trinket.1.cooldown.remains|!variable.trinket_1_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
+actions.cooldowns+=/use_item,slot=trinket1,if=!variable.trinket_1_buffs&(trinket.2.cooldown.remains|!variable.trinket_2_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
+actions.cooldowns+=/use_item,slot=trinket2,if=!variable.trinket_2_buffs&(trinket.1.cooldown.remains|!variable.trinket_1_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
 actions.cooldowns+=/use_item,name=shadowed_razing_annihilator,if=(trinket.2.cooldown.remains|!variable.trinket_2_buffs)&(trinket.2.cooldown.remains|!variable.trinket_2_buffs)
+actions.cooldowns+=/use_item,name=fyralath_the_dreamrender,if=dot.mark_of_fyralath.ticking&!buff.avenging_wrath.up&!buff.crusade.up
 actions.cooldowns+=/shield_of_vengeance,if=fight_remains>15&(!talent.execution_sentence|!debuff.execution_sentence.up)
 actions.cooldowns+=/execution_sentence,if=(!buff.crusade.up&cooldown.crusade.remains>15|buff.crusade.stack=10|cooldown.avenging_wrath.remains<0.75|cooldown.avenging_wrath.remains>15)&(holy_power>=3|holy_power>=2&talent.divine_auxiliary)&(target.time_to_die>8|target.time_to_die>12&talent.executioners_will)
 actions.cooldowns+=/avenging_wrath,if=holy_power>=4&time<5|holy_power>=3&time>5|holy_power>=2&talent.divine_auxiliary&(cooldown.execution_sentence.remains=0|cooldown.final_reckoning.remains=0)
 actions.cooldowns+=/crusade,if=holy_power>=5&time<5|holy_power>=3&time>5
 actions.cooldowns+=/final_reckoning,if=(holy_power>=4&time<8|holy_power>=3&time>=8|holy_power>=2&talent.divine_auxiliary)&(cooldown.avenging_wrath.remains>10|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(time_to_hpg>0|holy_power=5|holy_power>=2&talent.divine_auxiliary)&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
+	if FyralathTheDreamrender:Usable() and Player.major_cd_remains == 0 and MarkOfFyralath:Up() then
+		return UseCooldown(FyralathTheDreamrender)
+	end
 	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and Player.holy_power.current >= (DivineAuxiliary.known and 2 or 3) and (
 		(AvengingWrath.known and (AvengingWrath:Ready(0.75) or not AvengingWrath:Ready(15) or AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
 		(Crusade.known and ((Crusade:Down() and not Crusade:Ready(10)) or Crusade:Stack() >= 10))
