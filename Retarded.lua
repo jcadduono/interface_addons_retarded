@@ -1138,7 +1138,6 @@ local CrusadingStrikes = Ability:Add(404542, false, true, 408385)
 CrusadingStrikes.triggers_gcd = false
 CrusadingStrikes.off_gcd = true
 CrusadingStrikes.ignore_cast = true
-CrusadingStrikes:AutoAoe()
 local CrusaderStrike = Ability:Add(35395, false, true)
 CrusaderStrike.cooldown_duration = 6
 CrusaderStrike.hasted_cooldown = true
@@ -1167,7 +1166,6 @@ local Expurgation = Ability:Add(383344, false, true, 383346)
 Expurgation.buff_duration = 6
 Expurgation.tick_interval = 3
 Expurgation.hasted_ticks = true
-Expurgation:AutoAoe(true, 'apply')
 local FinalReckoning = Ability:Add(343721, true, true)
 FinalReckoning.buff_duration = 12
 FinalReckoning.cooldown_duration = 60
@@ -1462,10 +1460,17 @@ function Player:UpdateKnown()
 	end
 	if BlessedChampion.known then
 		CrusaderStrike:AutoAoe()
+		CrusadingStrikes:AutoAoe()
 		Judgment:AutoAoe()
 	else
 		CrusaderStrike.auto_aoe = nil
+		CrusadingStrikes.auto_aoe = nil
 		Judgment.auto_aoe = nil
+	end
+	if BladeOfVengeance.known then
+		Expurgation:AutoAoe(true, 'apply')
+	else
+		Expurgation.auto_aoe = nil
 	end
 	if self.spec == SPEC.RETRIBUTION then
 		EchoesOfWrath.known = self.set_bonus.t31 >= 4
