@@ -1937,6 +1937,7 @@ actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
 	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
+	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (EchoesOfWrath.known and CrusadingStrikes.known and EchoesOfWrath:Up()) or (not WrathfulSanction.known and DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4))
 	if self.use_cds then
 		self:cooldowns()
 	end
@@ -1972,21 +1973,21 @@ actions.cooldowns+=/final_reckoning,if=(holy_power>=4&time<8|holy_power>=3&time>
 		return UseCooldown(ExecutionSentence)
 	end
 	if AvengingWrath:Usable() and AvengingWrath:Down() and (
-		(Player:TimeInCombat() < 5 and Player.holy_power.current >= 4) or
-		(Player:TimeInCombat() > 5 and Player.holy_power.current >= 3) or
-		(Player.holy_power.current >= 2 and DivineAuxiliary.known and ((ExecutionSentence.known and ExecutionSentence:Ready()) or (FinalReckoning.known and FinalReckoning:Ready())))
+		Player.holy_power.current >= 4 or
+		(self.finish_condition and Player.holy_power.current >= 3) or
+		(DivineAuxiliary.known and Player.holy_power.current >= 2 and ((ExecutionSentence.known and ExecutionSentence:Ready()) or (FinalReckoning.known and FinalReckoning:Ready())))
 	) then
 		return UseCooldown(AvengingWrath)
 	end
 	if Crusade:Usable() and Crusade:Down() and (
 		(Player:TimeInCombat() < 5 and Player.holy_power.current >= 5) or
-		(Player:TimeInCombat() > 5 and Player.holy_power.current >= 3)
+		((self.finish_condition or Player:TimeInCombat() > 5) and Player.holy_power.current >= 3)
 	) then
 		return UseCooldown(Crusade)
 	end
-	if FinalReckoning:Usable() and (Player.holy_power.current >= 5 or (DivineAuxiliary.known and Player.holy_power.current >= 2)) and (
-		(Player:TimeInCombat() < 8 and Player.holy_power.current >= 4) or
-		(Player:TimeInCombat() >= 8 and Player.holy_power.current >= 3) or
+	if FinalReckoning:Usable() and (
+		Player.holy_power.current >= 4 or
+		(self.finish_condition and Player.holy_power.current >= 3) or
 		(DivineAuxiliary.known and Player.holy_power.current >= 2)
 	) and (
 		((Target.boss or Player.enemies >= 3) and Target.timeToDie < 10) or
@@ -2058,7 +2059,7 @@ actions.generators+=/arcane_torrent
 actions.generators+=/consecration
 actions.generators+=/divine_hammer
 ]]
-	if Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (EchoesOfWrath.known and CrusadingStrikes.known and EchoesOfWrath:Up()) or (not WrathfulSanction.known and DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) then
+	if self.finish_condition then
 		local apl = self:finishers()
 		if apl then return apl end
 	end
