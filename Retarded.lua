@@ -1932,6 +1932,8 @@ actions.precombat+=/variable,name=trinket_priority,op=setif,value=2,value_else=1
 --[[
 actions=auto_attack
 actions+=/rebuke
+actions+=/variable,name=dp_ending,value=talent.divine_purpose&buff.divine_purpose.up&buff.divine_purpose.remains<gcd*2
+actions+=/variable,name=finish_condition,value=holy_power=5|variable.dp_ending|buff.echoes_of_wrath.up&set_bonus.tier31_4pc&talent.crusading_strikes|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up&!set_bonus.tier31_2pc
 actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
@@ -1958,35 +1960,39 @@ actions.cooldowns+=/use_item,slot=trinket2,if=!variable.trinket_2_buffs&(trinket
 actions.cooldowns+=/use_item,name=shadowed_razing_annihilator,if=(trinket.2.cooldown.remains|!variable.trinket_2_buffs)&(trinket.2.cooldown.remains|!variable.trinket_2_buffs)
 actions.cooldowns+=/use_item,name=fyralath_the_dreamrender,if=dot.mark_of_fyralath.ticking&!buff.avenging_wrath.up&!buff.crusade.up
 actions.cooldowns+=/shield_of_vengeance,if=fight_remains>15&(!talent.execution_sentence|!debuff.execution_sentence.up)
-actions.cooldowns+=/execution_sentence,if=(!buff.crusade.up&cooldown.crusade.remains>15|buff.crusade.stack=10|cooldown.avenging_wrath.remains<0.75|cooldown.avenging_wrath.remains>15)&(holy_power>=3|holy_power>=2&talent.divine_auxiliary)&(target.time_to_die>8|target.time_to_die>12&talent.executioners_will)
-actions.cooldowns+=/avenging_wrath,if=holy_power>=4&time<5|holy_power>=3&time>5|holy_power>=2&talent.divine_auxiliary&(cooldown.execution_sentence.remains=0|cooldown.final_reckoning.remains=0)
-actions.cooldowns+=/crusade,if=holy_power>=5&time<5|holy_power>=3&time>5
-actions.cooldowns+=/final_reckoning,if=(holy_power>=4&time<8|holy_power>=3&time>=8|holy_power>=2&talent.divine_auxiliary)&(cooldown.avenging_wrath.remains>10|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(time_to_hpg>0|holy_power=5|holy_power>=2&talent.divine_auxiliary)&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
+actions.cooldowns+=/execution_sentence,if=(!buff.crusade.up&cooldown.crusade.remains>15|buff.crusade.stack=10|cooldown.avenging_wrath.remains<0.75|cooldown.avenging_wrath.remains>15)&(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(target.time_to_die>8&!talent.executioners_will|target.time_to_die>12)
+actions.cooldowns+=/avenging_wrath,if=holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary&(cooldown.execution_sentence.remains=0|cooldown.final_reckoning.remains=0)
+actions.cooldowns+=/crusade,if=holy_power>=5|holy_power>=3&variable.finish_condition
+actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(buff.avenging_wrath.remains>8|buff.avenging_wrath.up&cooldown.avenging_wrath.remains<buff.avenging_wrath.remains|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
 	if FyralathTheDreamrender:Usable() and Player.major_cd_remains == 0 and MarkOfFyralath:Up() then
 		return UseCooldown(FyralathTheDreamrender)
 	end
-	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and Player.holy_power.current >= (DivineAuxiliary.known and 2 or 3) and (
+	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and (
+		Player.holy_power.current >= 5 or
+		(self.finish_condition and Player.holy_power.current >= 3) or
+		(DivineAuxiliary.known and Player.holy_power.current >= 2)
+	) and (
 		(AvengingWrath.known and (AvengingWrath:Ready(0.75) or not AvengingWrath:Ready(15) or AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
 		(Crusade.known and ((Crusade:Down() and not Crusade:Ready(10)) or Crusade:Stack() >= 10))
 	) then
 		return UseCooldown(ExecutionSentence)
 	end
 	if AvengingWrath:Usable() and AvengingWrath:Down() and (
-		Player.holy_power.current >= 4 or
+		Player.holy_power.current >= 5 or
 		(self.finish_condition and Player.holy_power.current >= 3) or
 		(DivineAuxiliary.known and Player.holy_power.current >= 2 and ((ExecutionSentence.known and ExecutionSentence:Ready()) or (FinalReckoning.known and FinalReckoning:Ready())))
 	) then
 		return UseCooldown(AvengingWrath)
 	end
 	if Crusade:Usable() and Crusade:Down() and (
-		(Player:TimeInCombat() < 5 and Player.holy_power.current >= 5) or
-		((self.finish_condition or Player:TimeInCombat() > 5) and Player.holy_power.current >= 3)
+		Player.holy_power.current >= 5 or
+		(self.finish_condition and Player.holy_power.current >= 3)
 	) then
 		return UseCooldown(Crusade)
 	end
 	if FinalReckoning:Usable() and (
-		Player.holy_power.current >= 4 or
+		Player.holy_power.current >= 5 or
 		(self.finish_condition and Player.holy_power.current >= 3) or
 		(DivineAuxiliary.known and Player.holy_power.current >= 2)
 	) and (
@@ -2032,7 +2038,7 @@ end
 
 APL[SPEC.RETRIBUTION].generators = function(self)
 --[[
-actions.generators=call_action_list,name=finishers,if=holy_power=5|buff.echoes_of_wrath.up&set_bonus.tier31_4pc&talent.crusading_strikes|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up&!set_bonus.tier31_2pc
+actions.generators=call_action_list,name=finishers,if=variable.finish_condition
 actions.generators+=/wake_of_ashes,if=holy_power<=2&(cooldown.avenging_wrath.remains|cooldown.crusade.remains)&(!talent.execution_sentence|cooldown.execution_sentence.remains>4|target.time_to_die<8)&(!talent.final_reckoning|cooldown.final_reckoning.remains>4|target.time_to_die<8)&(!raid_event.adds.exists|raid_event.adds.in>20|raid_event.adds.up)
 actions.generators+=/blade_of_justice,if=!dot.expurgation.ticking&set_bonus.tier31_2pc
 actions.generators+=/divine_toll,if=holy_power<=2&!debuff.judgment.up&(!raid_event.adds.exists|raid_event.adds.in>30|raid_event.adds.up)&(cooldown.avenging_wrath.remains>15|cooldown.crusade.remains>15|fight_remains<8)
