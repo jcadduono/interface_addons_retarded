@@ -1126,7 +1126,6 @@ BladeOfJustice.max_range = 12
 BladeOfJustice.hasted_cooldown = true
 BladeOfJustice.requires_charge = true
 local BladeOfVengeance = Ability:Add(403826, false, true, 404358)
-BladeOfVengeance:AutoAoe(true)
 local BlessedChampion = Ability:Add(403010, false, true)
 local BoundlessJudgment = Ability:Add(405278, false, true)
 local ConsecratedBlade = Ability:Add(404834, false, true)
@@ -1139,6 +1138,7 @@ local CrusadingStrikes = Ability:Add(404542, false, true, 408385)
 CrusadingStrikes.triggers_gcd = false
 CrusadingStrikes.off_gcd = true
 CrusadingStrikes.ignore_cast = true
+CrusadingStrikes:AutoAoe()
 local CrusaderStrike = Ability:Add(35395, false, true)
 CrusaderStrike.cooldown_duration = 6
 CrusaderStrike.hasted_cooldown = true
@@ -1167,6 +1167,7 @@ local Expurgation = Ability:Add(383344, false, true, 383346)
 Expurgation.buff_duration = 6
 Expurgation.tick_interval = 3
 Expurgation.hasted_ticks = true
+Expurgation:AutoAoe(true, 'apply')
 local FinalReckoning = Ability:Add(343721, true, true)
 FinalReckoning.buff_duration = 12
 FinalReckoning.cooldown_duration = 60
