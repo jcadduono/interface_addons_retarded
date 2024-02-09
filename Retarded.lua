@@ -1163,6 +1163,10 @@ local ExecutionSentence = Ability:Add(343527, false, true)
 ExecutionSentence.buff_duration = 8
 ExecutionSentence.cooldown_duration = 30
 local ExecutionersWill = Ability:Add(406940, false, true)
+local Expurgation = Ability:Add(383344, false, true, 383346)
+Expurgation.buff_duration = 6
+Expurgation.tick_interval = 3
+Expurgation.hasted_ticks = true
 local FinalReckoning = Ability:Add(343721, true, true)
 FinalReckoning.buff_duration = 12
 FinalReckoning.cooldown_duration = 60
@@ -1196,6 +1200,10 @@ WakeOfAshes.ignore_immune = true
 WakeOfAshes:AutoAoe()
 ------ Procs
 
+-- Tier set bonuses
+local EchoesOfWrath = Ability:Add(423590, true, true) -- T31 4pc (Retribution)
+EchoesOfWrath.buff_duration = 12
+local WrathfulSanction = Ability:Add(424590, false, true) -- T31 2pc (Retribution)
 -- Racials
 
 -- PvP talents
@@ -1451,6 +1459,10 @@ function Player:UpdateKnown()
 	else
 		CrusaderStrike.auto_aoe = nil
 		Judgment.auto_aoe = nil
+	end
+	if self.spec == SPEC.RETRIBUTION then
+		EchoesOfWrath.known = self.set_bonus.t31 >= 4
+		WrathfulSanction.known = self.set_bonus.t31 >= 2
 	end
 
 	Abilities:Update()
@@ -2007,9 +2019,11 @@ end
 
 APL[SPEC.RETRIBUTION].generators = function(self)
 --[[
-actions.generators=call_action_list,name=finishers,if=holy_power=5|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up
+actions.generators=call_action_list,name=finishers,if=holy_power=5|buff.echoes_of_wrath.up&set_bonus.tier31_4pc&talent.crusading_strikes|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up&!set_bonus.tier31_2pc
 actions.generators+=/wake_of_ashes,if=holy_power<=2&(cooldown.avenging_wrath.remains|cooldown.crusade.remains)&(!talent.execution_sentence|cooldown.execution_sentence.remains>4|target.time_to_die<8)&(!talent.final_reckoning|cooldown.final_reckoning.remains>4|target.time_to_die<8)&(!raid_event.adds.exists|raid_event.adds.in>20|raid_event.adds.up)
+actions.generators+=/blade_of_justice,if=!dot.expurgation.ticking&set_bonus.tier31_2pc
 actions.generators+=/divine_toll,if=holy_power<=2&!debuff.judgment.up&(!raid_event.adds.exists|raid_event.adds.in>30|raid_event.adds.up)&(cooldown.avenging_wrath.remains>15|cooldown.crusade.remains>15|fight_remains<8)
+actions.generators+=/judgment,if=dot.expurgation.ticking&!buff.echoes_of_wrath.up&set_bonus.tier31_2pc
 actions.generators+=/call_action_list,name=finishers,if=holy_power>=3&buff.crusade.up&buff.crusade.stack<10
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd&spell_targets.divine_storm>=2
 actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&(spell_targets.divine_storm>=2&!talent.crusading_strikes|spell_targets.divine_storm>=4)
@@ -2032,7 +2046,7 @@ actions.generators+=/arcane_torrent
 actions.generators+=/consecration
 actions.generators+=/divine_hammer
 ]]
-	if Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or ((Judgment:Up() or Player.holy_power.current >= 4) and DivineResonance:Up()) then
+	if Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (EchoesOfWrath.known and CrusadingStrikes.known and EchoesOfWrath:Up()) or (not WrathfulSanction.known and DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) then
 		local apl = self:finishers()
 		if apl then return apl end
 	end
@@ -2045,8 +2059,14 @@ actions.generators+=/divine_hammer
 	) then
 		UseCooldown(WakeOfAshes)
 	end
+	if WrathfulSanction.known and BladeOfJustice:Usable() and Expurgation:Down() then
+		return BladeOfJustice
+	end
 	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and Judgment:Down() and ((AvengingWrath.known and not AvengingWrath:Ready(15)) or (Crusade.known and not Crusade:Ready(15)) or Target.timeToDie < 8) then
 		UseCooldown(DivineToll)
+	end
+	if WrathfulSanction.known and Judgment:Usable() and Expurgation:Up() and EchoesOfWrath:Down() then
+		return Judgment
 	end
 	if Crusade.known and Player.holy_power.current >= 3 and Crusade:Up() and Crusade:Stack() < 10 then
 		local apl = self:finishers()
