@@ -1939,12 +1939,15 @@ actions=auto_attack
 actions+=/rebuke
 actions+=/variable,name=dp_ending,value=talent.divine_purpose&buff.divine_purpose.up&buff.divine_purpose.remains<gcd*2
 actions+=/variable,name=finish_condition,value=holy_power=5|variable.dp_ending|buff.echoes_of_wrath.up&set_bonus.tier31_4pc&talent.crusading_strikes|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up&!set_bonus.tier31_2pc
+actions+=/variable,name=hold_boj,value=debuff.judgment.down&cooldown.judgment.remains<gcd&dot.expurgation.remains>gcd*2&holy_power>=3
 actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
 	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
 	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (EchoesOfWrath.known and CrusadingStrikes.known and EchoesOfWrath:Up()) or (not WrathfulSanction.known and DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4))
+	self.hold_boj = Judgment:Down() and Judgment:Ready(Player.gcd) and Expurgation:Remains() > (Player.gcd * 2) and Player.holy_power.current >= 3
+	self.hold_judgment = DivineResonance.known and DivineResonance:Up(true) and (DivineResonance:Remains(true) % 5) < (Player.gcd * 1.5)
 	if self.use_cds then
 		self:cooldowns()
 	end
@@ -2050,12 +2053,11 @@ actions.generators+=/divine_toll,if=holy_power<=2&!debuff.judgment.up&(!raid_eve
 actions.generators+=/judgment,if=dot.expurgation.ticking&!buff.echoes_of_wrath.up&set_bonus.tier31_2pc
 actions.generators+=/call_action_list,name=finishers,if=holy_power>=3&buff.crusade.up&buff.crusade.stack<10
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd&spell_targets.divine_storm>=2
-actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&(spell_targets.divine_storm>=2&!talent.crusading_strikes|spell_targets.divine_storm>=4)
+actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&(spell_targets.divine_storm>=2&!talent.crusading_strikes|spell_targets.divine_storm>=4)&!variable.hold_boj
 actions.generators+=/hammer_of_wrath,if=(spell_targets.divine_storm<2|!talent.blessed_champion|set_bonus.tier30_4pc)&(holy_power<=3|target.health.pct>20|!talent.vanguards_momentum)
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd
-actions.generators+=/judgment,if=!buff.avenging_wrath.up&(holy_power<=3|!talent.boundless_judgment)&talent.crusading_strikes
-actions.generators+=/blade_of_justice,if=holy_power<=3|!talent.holy_blade
 actions.generators+=/judgment,if=!debuff.judgment.up&(holy_power<=3|!talent.boundless_judgment)
+actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&!variable.hold_boj
 actions.generators+=/call_action_list,name=finishers,if=(target.health.pct<=20|buff.avenging_wrath.up|buff.crusade.up|buff.empyrean_power.up)
 actions.generators+=/consecration,if=!consecration.up&spell_targets.divine_storm>=2
 actions.generators+=/divine_hammer,if=spell_targets.divine_storm>=2
@@ -2089,7 +2091,7 @@ actions.generators+=/divine_hammer
 	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and Judgment:Down() and ((AvengingWrath.known and not AvengingWrath:Ready(15)) or (Crusade.known and not Crusade:Ready(15)) or Target.timeToDie < 8) then
 		UseCooldown(DivineToll)
 	end
-	if WrathfulSanction.known and Judgment:Usable() and Expurgation:Up() and EchoesOfWrath:Down() then
+	if WrathfulSanction.known and Judgment:Usable() and not self.hold_judgment and Expurgation:Up() and EchoesOfWrath:Down() then
 		return Judgment
 	end
 	if Crusade.known and Player.holy_power.current >= 3 and Crusade:Up() and Crusade:Stack() < 10 then
@@ -2099,7 +2101,7 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() and Player.enemies >= 2 and TemplarStrikes:Remains() < Player.gcd then
 		return TemplarSlash
 	end
-	if BladeOfJustice:Usable() and (Player.holy_power.current <= 3 or not HolyBlade.known) and (Player.enemies >= (CrusadingStrikes.known and 4 or 2)) then
+	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) and (Player.enemies >= (CrusadingStrikes.known and 4 or 2)) then
 		return BladeOfJustice
 	end
 	if HammerOfWrath:Usable() and (Player.enemies < 2 or not BlessedChampion.known or Player.set_bonus.t30 >= 4) and (Player.holy_power.current <= 3 or Target.health.pct > 20 or not VanguardsMomentum.known) then
@@ -2108,14 +2110,11 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() and TemplarStrikes:Remains() < Player.gcd then
 		return TemplarSlash
 	end
-	if CrusadingStrikes.known and Judgment:Usable() and AvengingWrath:Down() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
+	if Judgment:Usable() and not self.hold_judgment and Judgment:Down() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
 		return Judgment
 	end
-	if BladeOfJustice:Usable() and (Player.holy_power.current <= 3 or not HolyBlade.known) then
+	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) then
 		return BladeOfJustice
-	end
-	if Judgment:Usable() and Judgment:Down() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
-		return Judgment
 	end
 	if Target.health.pct <= 20 or Player.major_cd_remains > 0 or EmpyreanPower:Up() then
 		local apl = self:finishers()
@@ -2137,7 +2136,7 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() then
 		return TemplarSlash
 	end
-	if Judgment:Usable() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
+	if Judgment:Usable() and not self.hold_judgment and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
 		return Judgment
 	end
 	if TemplarStrike:Usable() then
