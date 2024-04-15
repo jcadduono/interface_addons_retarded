@@ -1,9 +1,23 @@
 local ADDON = 'Retarded'
+local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
+
+BINDING_CATEGORY_RETARDED = ADDON
+BINDING_NAME_RETARDED_TARGETMORE = "Toggle Targets +"
+BINDING_NAME_RETARDED_TARGETLESS = "Toggle Targets -"
+BINDING_NAME_RETARDED_TARGET1 = "Set Targets to 1"
+BINDING_NAME_RETARDED_TARGET2 = "Set Targets to 2"
+BINDING_NAME_RETARDED_TARGET3 = "Set Targets to 3"
+BINDING_NAME_RETARDED_TARGET4 = "Set Targets to 4"
+BINDING_NAME_RETARDED_TARGET5 = "Set Targets to 5+"
+
+local function log(...)
+	print(ADDON, '-', ...)
+end
+
 if select(2, UnitClass('player')) ~= 'PALADIN' then
-	DisableAddOn(ADDON)
+	log('[|cFFFF0000Error|r]', 'Not loading because you are not the correct class! Consider disabling', ADDON, 'for this character.')
 	return
 end
-local ADDON_PATH = 'Interface\\AddOns\\' .. ADDON .. '\\'
 
 -- reference heavily accessed global functions from local scope for performance
 local min = math.min
@@ -48,7 +62,6 @@ Retarded = {}
 local Opt -- use this as a local table reference to Retarded
 
 SLASH_Retarded1, SLASH_Retarded2, SLASH_Retarded3 = '/ret', '/retard', '/retarded'
-BINDING_HEADER_RETARDED = ADDON
 
 local function InitOpts()
 	local function SetDefaults(t, ref)
@@ -259,135 +272,6 @@ local Target = {
 	estimated_range = 30,
 }
 
-local retardedPanel = CreateFrame('Frame', 'retardedPanel', UIParent)
-retardedPanel:SetPoint('CENTER', 0, -169)
-retardedPanel:SetFrameStrata('BACKGROUND')
-retardedPanel:SetSize(64, 64)
-retardedPanel:SetMovable(true)
-retardedPanel:SetUserPlaced(true)
-retardedPanel:RegisterForDrag('LeftButton')
-retardedPanel:SetScript('OnDragStart', retardedPanel.StartMoving)
-retardedPanel:SetScript('OnDragStop', retardedPanel.StopMovingOrSizing)
-retardedPanel:Hide()
-retardedPanel.icon = retardedPanel:CreateTexture(nil, 'BACKGROUND')
-retardedPanel.icon:SetAllPoints(retardedPanel)
-retardedPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-retardedPanel.border = retardedPanel:CreateTexture(nil, 'ARTWORK')
-retardedPanel.border:SetAllPoints(retardedPanel)
-retardedPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-retardedPanel.border:Hide()
-retardedPanel.dimmer = retardedPanel:CreateTexture(nil, 'BORDER')
-retardedPanel.dimmer:SetAllPoints(retardedPanel)
-retardedPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-retardedPanel.dimmer:Hide()
-retardedPanel.swipe = CreateFrame('Cooldown', nil, retardedPanel, 'CooldownFrameTemplate')
-retardedPanel.swipe:SetAllPoints(retardedPanel)
-retardedPanel.swipe:SetDrawBling(false)
-retardedPanel.swipe:SetDrawEdge(false)
-retardedPanel.text = CreateFrame('Frame', nil, retardedPanel)
-retardedPanel.text:SetAllPoints(retardedPanel)
-retardedPanel.text.tl = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.tl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedPanel.text.tl:SetPoint('TOPLEFT', retardedPanel, 'TOPLEFT', 2.5, -3)
-retardedPanel.text.tl:SetJustifyH('LEFT')
-retardedPanel.text.tr = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.tr:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedPanel.text.tr:SetPoint('TOPRIGHT', retardedPanel, 'TOPRIGHT', -2.5, -3)
-retardedPanel.text.tr:SetJustifyH('RIGHT')
-retardedPanel.text.bl = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.bl:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedPanel.text.bl:SetPoint('BOTTOMLEFT', retardedPanel, 'BOTTOMLEFT', 2.5, 3)
-retardedPanel.text.bl:SetJustifyH('LEFT')
-retardedPanel.text.br = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.br:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedPanel.text.br:SetPoint('BOTTOMRIGHT', retardedPanel, 'BOTTOMRIGHT', -2.5, 3)
-retardedPanel.text.br:SetJustifyH('RIGHT')
-retardedPanel.text.center = retardedPanel.text:CreateFontString(nil, 'OVERLAY')
-retardedPanel.text.center:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedPanel.text.center:SetAllPoints(retardedPanel.text)
-retardedPanel.text.center:SetJustifyH('CENTER')
-retardedPanel.text.center:SetJustifyV('CENTER')
-retardedPanel.button = CreateFrame('Button', nil, retardedPanel)
-retardedPanel.button:SetAllPoints(retardedPanel)
-retardedPanel.button:RegisterForClicks('LeftButtonDown', 'RightButtonDown', 'MiddleButtonDown')
-local retardedPreviousPanel = CreateFrame('Frame', 'retardedPreviousPanel', UIParent)
-retardedPreviousPanel:SetFrameStrata('BACKGROUND')
-retardedPreviousPanel:SetSize(64, 64)
-retardedPreviousPanel:SetMovable(true)
-retardedPreviousPanel:SetUserPlaced(true)
-retardedPreviousPanel:RegisterForDrag('LeftButton')
-retardedPreviousPanel:SetScript('OnDragStart', retardedPreviousPanel.StartMoving)
-retardedPreviousPanel:SetScript('OnDragStop', retardedPreviousPanel.StopMovingOrSizing)
-retardedPreviousPanel:Hide()
-retardedPreviousPanel.icon = retardedPreviousPanel:CreateTexture(nil, 'BACKGROUND')
-retardedPreviousPanel.icon:SetAllPoints(retardedPreviousPanel)
-retardedPreviousPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-retardedPreviousPanel.border = retardedPreviousPanel:CreateTexture(nil, 'ARTWORK')
-retardedPreviousPanel.border:SetAllPoints(retardedPreviousPanel)
-retardedPreviousPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-local retardedCooldownPanel = CreateFrame('Frame', 'retardedCooldownPanel', UIParent)
-retardedCooldownPanel:SetFrameStrata('BACKGROUND')
-retardedCooldownPanel:SetSize(64, 64)
-retardedCooldownPanel:SetMovable(true)
-retardedCooldownPanel:SetUserPlaced(true)
-retardedCooldownPanel:RegisterForDrag('LeftButton')
-retardedCooldownPanel:SetScript('OnDragStart', retardedCooldownPanel.StartMoving)
-retardedCooldownPanel:SetScript('OnDragStop', retardedCooldownPanel.StopMovingOrSizing)
-retardedCooldownPanel:Hide()
-retardedCooldownPanel.icon = retardedCooldownPanel:CreateTexture(nil, 'BACKGROUND')
-retardedCooldownPanel.icon:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-retardedCooldownPanel.border = retardedCooldownPanel:CreateTexture(nil, 'ARTWORK')
-retardedCooldownPanel.border:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-retardedCooldownPanel.dimmer = retardedCooldownPanel:CreateTexture(nil, 'BORDER')
-retardedCooldownPanel.dimmer:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.dimmer:SetColorTexture(0, 0, 0, 0.6)
-retardedCooldownPanel.dimmer:Hide()
-retardedCooldownPanel.swipe = CreateFrame('Cooldown', nil, retardedCooldownPanel, 'CooldownFrameTemplate')
-retardedCooldownPanel.swipe:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.swipe:SetDrawBling(false)
-retardedCooldownPanel.swipe:SetDrawEdge(false)
-retardedCooldownPanel.text = retardedCooldownPanel:CreateFontString(nil, 'OVERLAY')
-retardedCooldownPanel.text:SetFont('Fonts\\FRIZQT__.TTF', 12, 'OUTLINE')
-retardedCooldownPanel.text:SetAllPoints(retardedCooldownPanel)
-retardedCooldownPanel.text:SetJustifyH('CENTER')
-retardedCooldownPanel.text:SetJustifyV('CENTER')
-local retardedInterruptPanel = CreateFrame('Frame', 'retardedInterruptPanel', UIParent)
-retardedInterruptPanel:SetFrameStrata('BACKGROUND')
-retardedInterruptPanel:SetSize(64, 64)
-retardedInterruptPanel:SetMovable(true)
-retardedInterruptPanel:SetUserPlaced(true)
-retardedInterruptPanel:RegisterForDrag('LeftButton')
-retardedInterruptPanel:SetScript('OnDragStart', retardedInterruptPanel.StartMoving)
-retardedInterruptPanel:SetScript('OnDragStop', retardedInterruptPanel.StopMovingOrSizing)
-retardedInterruptPanel:Hide()
-retardedInterruptPanel.icon = retardedInterruptPanel:CreateTexture(nil, 'BACKGROUND')
-retardedInterruptPanel.icon:SetAllPoints(retardedInterruptPanel)
-retardedInterruptPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-retardedInterruptPanel.border = retardedInterruptPanel:CreateTexture(nil, 'ARTWORK')
-retardedInterruptPanel.border:SetAllPoints(retardedInterruptPanel)
-retardedInterruptPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-retardedInterruptPanel.swipe = CreateFrame('Cooldown', nil, retardedInterruptPanel, 'CooldownFrameTemplate')
-retardedInterruptPanel.swipe:SetAllPoints(retardedInterruptPanel)
-retardedInterruptPanel.swipe:SetDrawBling(false)
-retardedInterruptPanel.swipe:SetDrawEdge(false)
-local retardedExtraPanel = CreateFrame('Frame', 'retardedExtraPanel', UIParent)
-retardedExtraPanel:SetFrameStrata('BACKGROUND')
-retardedExtraPanel:SetSize(64, 64)
-retardedExtraPanel:SetMovable(true)
-retardedExtraPanel:SetUserPlaced(true)
-retardedExtraPanel:RegisterForDrag('LeftButton')
-retardedExtraPanel:SetScript('OnDragStart', retardedExtraPanel.StartMoving)
-retardedExtraPanel:SetScript('OnDragStop', retardedExtraPanel.StopMovingOrSizing)
-retardedExtraPanel:Hide()
-retardedExtraPanel.icon = retardedExtraPanel:CreateTexture(nil, 'BACKGROUND')
-retardedExtraPanel.icon:SetAllPoints(retardedExtraPanel)
-retardedExtraPanel.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
-retardedExtraPanel.border = retardedExtraPanel:CreateTexture(nil, 'ARTWORK')
-retardedExtraPanel.border:SetAllPoints(retardedExtraPanel)
-retardedExtraPanel.border:SetTexture(ADDON_PATH .. 'border.blp')
-
 -- Start AoE
 
 Player.target_modes = {
@@ -596,7 +480,7 @@ function Ability:Usable(seconds, pool)
 	return self:Ready(seconds)
 end
 
-function Ability:Remains(offGCD)
+function Ability:Remains()
 	if self:Casting() or self:Traveling() > 0 then
 		return self:Duration()
 	end
@@ -609,7 +493,7 @@ function Ability:Remains(offGCD)
 			if expires == 0 then
 				return 600 -- infinite duration
 			end
-			return max(0, expires - Player.ctime - (offGCD and 0 or Player.execute_remains))
+			return max(0, expires - Player.ctime - (self.off_gcd and 0 or Player.execute_remains))
 		end
 	end
 	return 0
@@ -1213,6 +1097,7 @@ MarkOfFyralath.buff_duration = 15
 MarkOfFyralath.tick_interval = 3
 MarkOfFyralath.hasted_ticks = true
 MarkOfFyralath.no_pandemic = true
+MarkOfFyralath:TrackAuras()
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1230,6 +1115,7 @@ function InventoryItem:Add(itemId)
 		name = name,
 		icon = icon,
 		can_use = false,
+		off_gcd = true,
 	}
 	setmetatable(item, self)
 	inventoryItems[#inventoryItems + 1] = item
@@ -1253,13 +1139,16 @@ function InventoryItem:Count()
 end
 
 function InventoryItem:Cooldown()
-	local startTime, duration
+	local start, duration
 	if self.equip_slot then
-		startTime, duration = GetInventoryItemCooldown('player', self.equip_slot)
+		start, duration = GetInventoryItemCooldown('player', self.equip_slot)
 	else
-		startTime, duration = GetItemCooldown(self.itemId)
+		start, duration = GetItemCooldown(self.itemId)
 	end
-	return startTime == 0 and 0 or duration - (Player.ctime - startTime)
+	if start == 0 then
+		return 0
+	end
+	return max(0, duration - (Player.ctime - start) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function InventoryItem:Ready(seconds)
@@ -1287,6 +1176,7 @@ local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
 local FyralathTheDreamrender = InventoryItem:Add(206448)
 FyralathTheDreamrender.cooldown_duration = 120
+FyralathTheDreamrender.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1794,6 +1684,12 @@ function Judgment:Remains()
 	return Ability.Remains(self)
 end
 
+function MarkOfFyralath:Refresh(guid)
+	if self.known and self.aura_targets[guid] then
+		self.aura_targets[guid].expires = Player.time + self.buff_duration
+	end
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1973,7 +1869,7 @@ actions.cooldowns+=/avenging_wrath,if=holy_power=5|holy_power>=3&variable.finish
 actions.cooldowns+=/crusade,if=holy_power>=5|holy_power>=3&variable.finish_condition
 actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(buff.avenging_wrath.remains>8|buff.avenging_wrath.up&cooldown.avenging_wrath.remains<buff.avenging_wrath.remains|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
-	if FyralathTheDreamrender:Usable() and Player.major_cd_remains == 0 and MarkOfFyralath:Up() then
+	if FyralathTheDreamrender:Usable() and MarkOfFyralath:Ticking() >= Player.enemies and Player.major_cd_remains == 0 then
 		return UseCooldown(FyralathTheDreamrender)
 	end
 	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and (
@@ -2263,7 +2159,7 @@ function UI:CreateOverlayGlows()
 			end
 		end
 	end
-	UI:UpdateGlowColorAndScale()
+	self:UpdateGlowColorAndScale()
 end
 
 function UI:UpdateGlows()
@@ -2299,6 +2195,18 @@ end
 
 function UI:UpdateDraggable()
 	local draggable = not (Opt.locked or Opt.snap or Opt.aoe)
+	retardedPanel:SetMovable(not Opt.snap)
+	retardedPreviousPanel:SetMovable(not Opt.snap)
+	retardedCooldownPanel:SetMovable(not Opt.snap)
+	retardedInterruptPanel:SetMovable(not Opt.snap)
+	retardedExtraPanel:SetMovable(not Opt.snap)
+	if not Opt.snap then
+		retardedPanel:SetUserPlaced(true)
+		retardedPreviousPanel:SetUserPlaced(true)
+		retardedCooldownPanel:SetUserPlaced(true)
+		retardedInterruptPanel:SetUserPlaced(true)
+		retardedExtraPanel:SetUserPlaced(true)
+	end
 	retardedPanel:EnableMouse(draggable or Opt.aoe)
 	retardedPanel.button:SetShown(Opt.aoe)
 	retardedPreviousPanel:EnableMouse(draggable)
@@ -2415,6 +2323,12 @@ function UI:Disappear()
 	Player.interrupt = nil
 	Player.extra = nil
 	UI:UpdateGlows()
+end
+
+function UI:Reset()
+	retardedPanel:ClearAllPoints()
+	retardedPanel:SetPoint('CENTER', 0, -169)
+	self:SnapAllPanels()
 end
 
 function UI:UpdateDisplay()
@@ -2559,12 +2473,12 @@ function Events:ADDON_LOADED(name)
 		UI:UpdateAlpha()
 		UI:UpdateScale()
 		if firstRun then
-			print('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
-			print('Type |cFFFFD000' .. SLASH_Retarded1 .. '|r for a list of commands.')
+			log('It looks like this is your first time running ' .. ADDON .. ', why don\'t you take some time to familiarize yourself with the commands?')
+			log('Type |cFFFFD000' .. SLASH_Retarded1 .. '|r for a list of commands.')
 			UI:SnapAllPanels()
 		end
 		if UnitLevel('player') < 10 then
-			print('[|cFFFFD000Warning|r] ' .. ADDON .. ' is not designed for players under level 10, and almost certainly will not operate properly!')
+			log('[|cFFFFD000Warning|r]', ADDON, 'is not designed for players under level 10, and almost certainly will not operate properly!')
 		end
 	end
 end
@@ -2611,6 +2525,7 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 		if Opt.auto_aoe then
 			AutoAoe:Add(dstGUID, true)
 		end
+		MarkOfFyralath:Refresh(dstGUID)
 	elseif dstGUID == Player.guid then
 		Player.swing.last_taken = Player.time
 		if Opt.auto_aoe then
@@ -2639,7 +2554,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--print(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -2670,6 +2585,9 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
+		if MarkOfFyralath.known and event ~= 'SPELL_MISSED' then
+			MarkOfFyralath:Refresh(dstGUID)
+		end
 	end
 end
 
@@ -2930,7 +2848,7 @@ local function Status(desc, opt, ...)
 	else
 		opt_view = opt and '|cFF00C000On|r' or '|cFFC00000Off|r'
 	end
-	print(ADDON, '-', desc .. ':', opt_view, ...)
+	log(desc .. ':', opt_view, ...)
 end
 
 SlashCmdList[ADDON] = function(msg, editbox)
@@ -2956,7 +2874,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 			else
 				Opt.snap = false
 				Opt.locked = false
-				retardedPanel:ClearAllPoints()
+				UI:Reset()
 			end
 			UI:UpdateDraggable()
 			UI.OnResourceFrameShow()
@@ -3202,9 +3120,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		return Status('Show aura reminders in extra UI', Opt.auras)
 	end
 	if msg[1] == 'reset' then
-		retardedPanel:ClearAllPoints()
-		retardedPanel:SetPoint('CENTER', 0, -169)
-		UI:SnapAllPanels()
+		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
 	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
