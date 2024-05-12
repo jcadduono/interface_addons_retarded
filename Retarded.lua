@@ -122,7 +122,7 @@ local function InitOpts()
 		cd_ttd = 10,
 		pot = false,
 		trinket = true,
-		heal_threshold = 60,
+		heal = 60,
 		defensives = true,
 		auras = true,
 	})
@@ -205,14 +205,14 @@ local Player = {
 		pct = 100,
 	},
 	mana = {
+		base = 0,
 		current = 0,
-		deficit = 0,
 		max = 100,
 		regen = 0,
 	},
 	holy_power = {
 		current = 0,
-		deficit = 0,
+		deficit = 5,
 		max = 5,
 	},
 	cast = {
@@ -245,6 +245,7 @@ local Player = {
 		t29 = 0, -- Virtuous Silver Cataphract
 		t30 = 0, -- Heartfire Sentinel's Authority
 		t31 = 0, -- Zealous Pyreknight's Ardor
+		t32 = 0, -- Heartfire Sentinel's Authority (Awakened)
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -257,10 +258,27 @@ local Player = {
 	major_cd_remains = 0,
 }
 
+-- base mana pool max for each level
+Player.BaseMana = {
+	260,	270,	285,	300,	310,	--  5
+	330,	345,	360,	380,	400,	-- 10
+	430,	465,	505,	550,	595,	-- 15
+	645,	700,	760,	825,	890,	-- 20
+	965,	1050,	1135,	1230,	1335,	-- 25
+	1445,	1570,	1700,	1845,	2000,	-- 30
+	2165,	2345,	2545,	2755,	2990,	-- 35
+	3240,	3510,	3805,	4125,	4470,	-- 40
+	4845,	5250,	5690,	6170,	6685,	-- 45
+	7245,	7855,	8510,	9225,	10000,	-- 50
+	11745,	13795,	16205,	19035,	22360,	-- 55
+	26265,	30850,	36235,	42565,	50000,	-- 60
+	58730,	68985,	81030,	95180,	111800,	-- 65
+	131325,	154255,	181190,	212830,	250000,	-- 70
+}
+
 -- current target information
 local Target = {
 	boss = false,
-	guid = 0,
 	health = {
 		current = 0,
 		loss_per_sec = 0,
@@ -270,6 +288,16 @@ local Target = {
 	},
 	hostile = false,
 	estimated_range = 30,
+}
+
+-- target dummy unit IDs (count these units as bosses)
+Target.Dummies = {
+	[194643] = true,
+	[194648] = true,
+	[198594] = true,
+	[194644] = true,
+	[194649] = true,
+	[197833] = true,
 }
 
 -- Start AoE
@@ -619,7 +647,7 @@ function Ability:Stack()
 end
 
 function Ability:ManaCost()
-	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.max) or 0
+	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.base) or 0
 end
 
 function Ability:HolyPowerCost()
@@ -845,7 +873,7 @@ function Ability:ApplyAura(guid)
 	return aura
 end
 
-function Ability:RefreshAura(guid)
+function Ability:RefreshAura(guid, extend)
 	if AutoAoe.blacklist[guid] then
 		return
 	end
@@ -854,14 +882,14 @@ function Ability:RefreshAura(guid)
 		return self:ApplyAura(guid)
 	end
 	local duration = self:Duration()
-	aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + duration))
+	aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
 	return aura
 end
 
-function Ability:RefreshAuraAll()
+function Ability:RefreshAuraAll(extend)
 	local duration = self:Duration()
 	for guid, aura in next, self.aura_targets do
-		aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + duration))
+		aura.expires = max(aura.expires, Player.time + min(duration * (self.no_pandemic and 1.0 or 1.3), (aura.expires - Player.time) + (extend or duration)))
 	end
 end
 
@@ -1302,9 +1330,6 @@ function Player:UpdateTime(timeStamp)
 end
 
 function Player:UpdateKnown()
-	self.mana.max = UnitPowerMax('player', 0)
-	self.holy_power.max = UnitPowerMax('player', 9)
-
 	local node
 	local configId = C_ClassTalents.GetActiveConfigID()
 	for _, ability in next, Abilities.all do
@@ -1363,8 +1388,8 @@ function Player:UpdateKnown()
 		Expurgation.auto_aoe = nil
 	end
 	if self.spec == SPEC.RETRIBUTION then
-		EchoesOfWrath.known = self.set_bonus.t31 >= 4
-		WrathfulSanction.known = self.set_bonus.t31 >= 2
+		EchoesOfWrath.known = self.set_bonus.t31 >= 4 or self.set_bonus.t32 >= 4
+		WrathfulSanction.known = self.set_bonus.t31 >= 2 or self.set_bonus.t32 >= 2
 	end
 	MarkOfFyralath.known = FyralathTheDreamrender:Equipped()
 
@@ -1395,11 +1420,15 @@ function Player:UpdateChannelInfo()
 		return
 	end
 	local ability = Abilities.bySpellId[spellId]
-	if ability and ability == channel.ability then
-		channel.chained = true
+	if ability then
+		if ability == channel.ability then
+			channel.chained = true
+		end
+		channel.interrupt_if = ability.interrupt_if
 	else
-		channel.ability = ability
+		channel.interrupt_if = nil
 	end
+	channel.ability = ability
 	channel.ticks = 0
 	channel.start = start / 1000
 	channel.ends = ends / 1000
@@ -1507,7 +1536,6 @@ function Player:Init()
 	retardedPreviousPanel.ability = nil
 	self.guid = UnitGUID('player')
 	self.name = UnitName('player')
-	self.level = UnitLevel('player')
 	_, self.instance = IsInInstance()
 	Events:GROUP_ROSTER_UPDATE()
 	Events:PLAYER_SPECIALIZATION_CHANGED('player')
@@ -1546,6 +1574,7 @@ function Target:Update()
 	local guid = UnitGUID('target')
 	if not guid then
 		self.guid = nil
+		self.uid = nil
 		self.boss = false
 		self.stunnable = true
 		self.classification = 'normal'
@@ -1565,6 +1594,7 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
+		self.uid = tonumber(guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
 		self:UpdateHealth(true)
 	end
 	self.boss = false
@@ -1579,6 +1609,9 @@ function Target:Update()
 	if not self.player and self.classification ~= 'minus' and self.classification ~= 'normal' then
 		self.boss = self.level >= (Player.level + 3)
 		self.stunnable = self.level < (Player.level + 2)
+	end
+	if self.Dummies[self.uid] then
+		self.boss = true
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
@@ -1629,11 +1662,10 @@ function DivineStorm:HolyPowerCost()
 end
 
 function HammerOfJustice:Usable()
-	if not Target.stunnable then
-		return false
-	end
-	return Ability.Usable(self)
+	return Target.stunnable and Ability.Usable(self)
 end
+Repentance.Usable = HammerOfJustice.Usable
+BlindingLight.Usable = HammerOfJustice.Usable
 
 function HammerOfWrath:Usable()
 	if not (
@@ -1716,7 +1748,7 @@ end
 
 APL[SPEC.HOLY].Main = function(self)
 	if Opt.defensives then
-		if Player.health.pct < Opt.heal_threshold then
+		if Player.health.pct < Opt.heal then
 			if LayOnHands:Usable() and Player.health.pct < 20 then
 				UseExtra(LayOnHands)
 			elseif DivineShield:Usable() and Player.health.pct < 20 then
@@ -1749,7 +1781,7 @@ end
 
 APL[SPEC.PROTECTION].Main = function(self)
 	if Opt.defensives then
-		if Player.health.pct < Opt.heal_threshold then
+		if Player.health.pct < Opt.heal then
 			if LayOnHands:Usable() and Player.health.pct < 20 then
 				UseExtra(LayOnHands)
 			elseif DivineShield:Usable() and Player.health.pct < 20 then
@@ -1782,7 +1814,7 @@ end
 
 APL[SPEC.RETRIBUTION].Main = function(self)
 	if Opt.defensives then
-		if Player.health.pct < Opt.heal_threshold then
+		if Player.health.pct < Opt.heal then
 			if DivineShield:Usable() and Player.health.pct < 20 then
 				UseExtra(DivineShield)
 			elseif LayOnHands:Usable() and Player.health.pct < 20 then
@@ -2056,16 +2088,14 @@ APL.Interrupt = function(self)
 	if Rebuke:Usable() then
 		return Rebuke
 	end
-	if Target.stunnable then
-		if HammerOfJustice:Usable() then
-			return HammerOfJustice
-		end
-		if Repentance:Usable() then
-			return Repentance
-		end
-		if BlindingLight:Usable() then
-			return BlindingLight
-		end
+	if HammerOfJustice:Usable() then
+		return HammerOfJustice
+	end
+	if Repentance:Usable() then
+		return Repentance
+	end
+	if BlindingLight:Usable() then
+		return BlindingLight
 	end
 end
 
@@ -2322,7 +2352,7 @@ function UI:Disappear()
 	Player.cd = nil
 	Player.interrupt = nil
 	Player.extra = nil
-	UI:UpdateGlows()
+	self:UpdateGlows()
 end
 
 function UI:Reset()
@@ -2333,7 +2363,7 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, border, text_center, text_tr, text_cd
+	local border, dim, dim_cd, text_center, text_tr, text_cd
 	local channel = Player.channel
 
 	if Opt.dimmer then
@@ -2613,9 +2643,18 @@ end
 
 function Events:UNIT_HEALTH(unitId)
 	if unitId == 'player' then
-		Player.health.current = UnitHealth('player')
-		Player.health.max = UnitHealthMax('player')
+		Player.health.current = UnitHealth(unitId)
+		Player.health.max = UnitHealthMax(unitId)
 		Player.health.pct = Player.health.current / Player.health.max * 100
+	end
+end
+
+function Events:UNIT_MAXPOWER(unitId)
+	if unitId == 'player' then
+		Player.level = UnitLevel(unitId)
+		Player.mana.base = Player.BaseMana[Player.level]
+		Player.mana.max = UnitPowerMax(unitId, 0)
+		Player.holy_power.max = UnitPowerMax(unitId, 9)
 	end
 end
 
@@ -2732,6 +2771,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	Player.set_bonus.t29 = (Player:Equipped(200414) and 1 or 0) + (Player:Equipped(200416) and 1 or 0) + (Player:Equipped(200417) and 1 or 0) + (Player:Equipped(200418) and 1 or 0) + (Player:Equipped(200419) and 1 or 0)
 	Player.set_bonus.t30 = (Player:Equipped(202450) and 1 or 0) + (Player:Equipped(202451) and 1 or 0) + (Player:Equipped(202452) and 1 or 0) + (Player:Equipped(202453) and 1 or 0) + (Player:Equipped(202455) and 1 or 0)
 	Player.set_bonus.t31 = (Player:Equipped(207189) and 1 or 0) + (Player:Equipped(207190) and 1 or 0) + (Player:Equipped(207191) and 1 or 0) + (Player:Equipped(207192) and 1 or 0) + (Player:Equipped(207194) and 1 or 0)
+	Player.set_bonus.t32 = (Player:Equipped(217196) and 1 or 0) + (Player:Equipped(217197) and 1 or 0) + (Player:Equipped(217198) and 1 or 0) + (Player:Equipped(217199) and 1 or 0) + (Player:Equipped(217200) and 1 or 0)
 
 	Player:UpdateKnown()
 end
@@ -2747,6 +2787,7 @@ function Events:PLAYER_SPECIALIZATION_CHANGED(unitId)
 	Events:UPDATE_SHAPESHIFT_FORM()
 	Events:PLAYER_REGEN_ENABLED()
 	Events:UNIT_HEALTH('player')
+	Events:UNIT_MAXPOWER('player')
 	UI.OnResourceFrameShow()
 	Target:Update()
 	Player:Update()
@@ -3103,9 +3144,9 @@ SlashCmdList[ADDON] = function(msg, editbox)
 	end
 	if startsWith(msg[1], 'he') then
 		if msg[2] then
-			Opt.heal_threshold = clamp(tonumber(msg[2]) or 60, 0, 100)
+			Opt.heal = clamp(tonumber(msg[2]) or 60, 0, 100)
 		end
-		return Status('Health percentage threshold to recommend self healing spells', Opt.heal_threshold .. '%')
+		return Status('Health percentage threshold to recommend self healing spells', Opt.heal .. '%')
 	end
 	if startsWith(msg[1], 'de') then
 		if msg[2] then
