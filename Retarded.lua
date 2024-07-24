@@ -903,7 +903,7 @@ end
 
 --[[
 Note: To get talent_node value for a talent, hover over talent and use macro:
-/dump GetMouseFocus():GetNodeID()
+/dump GetMouseFoci()[1]:GetNodeID()
 ]]
 
 -- Paladin Abilities
@@ -1039,6 +1039,7 @@ BladeOfJustice.hasted_cooldown = true
 BladeOfJustice.requires_charge = true
 local BladeOfVengeance = Ability:Add(403826, false, true, 404358)
 local BlessedChampion = Ability:Add(403010, false, true)
+BlessedChampion.talent_node = 81541
 local BoundlessJudgment = Ability:Add(405278, false, true)
 local ConsecratedBlade = Ability:Add(404834, false, true)
 local Crusade = Ability:Add(231895, true, true)
@@ -1088,6 +1089,7 @@ FinalVerdict.holy_power_cost = 3
 local HolyBlade = Ability:Add(383342, false, true)
 local JusticarsVengeance = Ability:Add(215661, false, true)
 JusticarsVengeance.holy_power_cost = 3
+local RadiantGlory = Ability:Add(458359, true, true)
 local ShieldOfVengeance = Ability:Add(184662, true, true)
 ShieldOfVengeance.buff_duration = 15
 ShieldOfVengeance.cooldown_duration = 90
@@ -1104,6 +1106,7 @@ TemplarSlash.buff_duration = 4
 TemplarSlash.mana_cost = 0.4
 local VanguardsMomentum = Ability:Add(383314, false, true)
 local VanguardOfJustice = Ability:Add(406545, false, true)
+VanguardOfJustice.talent_node = 93173
 local WakeOfAshes = Ability:Add(255937, false, true, 255941)
 WakeOfAshes.buff_duration = 5
 WakeOfAshes.cooldown_duration = 30
@@ -1642,23 +1645,16 @@ function Ability:HolyPowerCost()
 	return self.holy_power_cost
 end
 
-function TemplarsVerdict:HolyPowerCost()
-	if DivinePurpose.known and DivinePurpose:Up() then
-		return 0
-	end
-	if VanguardOfJustice.known then
-		return self.holy_power_cost + 1
-	end
-	return self.holy_power_cost
+function AvengingWrath:Usable(...)
+	return not RadiantGlory.known and Ability.Usable(self, ...)
 end
-FinalVerdict.HolyPowerCost = TemplarsVerdict.HolyPowerCost
-JusticarsVengeance.HolyPowerCost = TemplarsVerdict.HolyPowerCost
+Crusade.Usable = AvengingWrath.Usable
 
 function DivineStorm:HolyPowerCost()
 	if EmpyreanPower.known and EmpyreanPower:Up() then
 		return 0
 	end
-	return TemplarsVerdict.HolyPowerCost(self)
+	return Ability.HolyPowerCost(self)
 end
 
 function HammerOfJustice:Usable()
@@ -1909,8 +1905,11 @@ actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.fini
 		(self.finish_condition and Player.holy_power.current >= 3) or
 		(DivineAuxiliary.known and Player.holy_power.current >= 2)
 	) and (
-		(AvengingWrath.known and (AvengingWrath:Ready(0.75) or not AvengingWrath:Ready(15) or AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
-		(Crusade.known and ((Crusade:Down() and not Crusade:Ready(10)) or Crusade:Stack() >= 10))
+		(RadiantGlory.known and WakeOfAshes:Ready(0.75)) or
+		not RadiantGlory.known and (
+			(AvengingWrath.known and (AvengingWrath:Ready(0.75) or not AvengingWrath:Ready(15) or AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
+			(Crusade.known and ((Crusade:Down() and not Crusade:Ready(10)) or Crusade:Stack() >= 10))
+		)
 	) then
 		return UseCooldown(ExecutionSentence)
 	end
@@ -1933,8 +1932,11 @@ actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.fini
 		(DivineAuxiliary.known and Player.holy_power.current >= 2)
 	) and (
 		((Target.boss or Player.enemies >= 3) and Target.timeToDie < 10) or
-		(AvengingWrath.known and (AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
-		(Crusade.known and (Crusade:Stack() >= 10 or (not Crusade:Ready() and Crusade:Down())))
+		(RadiantGlory.known and WakeOfAshes:Ready(0.75)) or
+		not RadiantGlory.known and (
+			(AvengingWrath.known and (AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
+			(Crusade.known and (Crusade:Stack() >= 10 or (not Crusade:Ready() and Crusade:Down())))
+		)
 	) then
 		return UseCooldown(FinalReckoning)
 	end
@@ -2006,6 +2008,7 @@ actions.generators+=/divine_hammer
 	end
 	if WakeOfAshes:Usable() and Player.holy_power.current <= 2 and (not ExecutionSentence.known or not ExecutionSentence:Ready(4) or Target.timeToDie < 8) and (not FinalReckoning.known or not FinalReckoning:Ready(4) or not self.use_cds) and (
 		not self.use_cds or
+		RadiantGlory.known or
 		Player.major_cd_remains > 0 or
 		(Target.boss and Target.timeToDie < 10) or
 		(AvengingWrath.known and not AvengingWrath:Ready(15)) or
@@ -2016,7 +2019,12 @@ actions.generators+=/divine_hammer
 	if WrathfulSanction.known and BladeOfJustice:Usable() and Expurgation:Down() then
 		return BladeOfJustice
 	end
-	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and Judgment:Down() and ((AvengingWrath.known and not AvengingWrath:Ready(15)) or (Crusade.known and not Crusade:Ready(15)) or Target.timeToDie < 8) then
+	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and Judgment:Down() and (
+		RadiantGlory.known or
+		(AvengingWrath.known and not AvengingWrath:Ready(15)) or
+		(Crusade.known and not Crusade:Ready(15)) or
+		Target.timeToDie < 8
+	) then
 		UseCooldown(DivineToll)
 	end
 	if WrathfulSanction.known and Judgment:Usable() and not self.hold_judgment and Expurgation:Up() and EchoesOfWrath:Down() then
