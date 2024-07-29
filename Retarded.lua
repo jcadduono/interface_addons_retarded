@@ -56,6 +56,11 @@ local function startsWith(str, start) -- case insensitive check to see if a stri
 	end
 	return string.lower(str:sub(1, start:len())) == start:lower()
 end
+
+local function ToUID(guid)
+	local uid = guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)')
+	return uid and tonumber(uid)
+end
 -- end useful functions
 
 Retarded = {}
@@ -279,6 +284,7 @@ Player.BaseMana = {
 -- current target information
 local Target = {
 	boss = false,
+	dummy = false,
 	health = {
 		current = 0,
 		loss_per_sec = 0,
@@ -292,12 +298,14 @@ local Target = {
 
 -- target dummy unit IDs (count these units as bosses)
 Target.Dummies = {
+	[189617] = true,
+	[189632] = true,
 	[194643] = true,
-	[194648] = true,
-	[198594] = true,
 	[194644] = true,
+	[194648] = true,
 	[194649] = true,
 	[197833] = true,
+	[198594] = true,
 }
 
 -- Start AoE
@@ -369,8 +377,8 @@ function AutoAoe:Add(guid, update)
 	if self.blacklist[guid] then
 		return
 	end
-	local unitId = guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)')
-	if unitId and self.ignored_units[tonumber(unitId)] then
+	local uid = ToUID(guid)
+	if uid and self.ignored_units[uid] then
 		self.blacklist[guid] = Player.time + 10
 		return
 	end
@@ -966,6 +974,7 @@ local BlindingLight = Ability:Add(115750, false, false, 105421)
 BlindingLight.mana_cost = 1.2
 BlindingLight.buff_duration = 6
 BlindingLight.cooldown_duration = 90
+local ConcentrationAura = Ability:Add(317920, true, false)
 local CrusaderAura = Ability:Add(32223, true, false)
 local DevotionAura = Ability:Add(465, true, false)
 local DivinePurpose = Ability:Add(408459, true, true, 408458)
@@ -1010,7 +1019,6 @@ local Repentance = Ability:Add(20066, false, false)
 Repentance.mana_cost = 1.2
 Repentance.buff_duration = 60
 Repentance.cooldown_duration = 15
-local RetributionAura = Ability:Add(183435, true, false)
 local TurnEvil = Ability:Add(10326, false, true)
 TurnEvil.mana_cost = 2.1
 TurnEvil.buff_duration = 40
@@ -1567,7 +1575,11 @@ function Target:UpdateHealth(reset)
 	self.timeToDieMax = self.health.current / Player.health.max * 10
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
-	self.timeToDie = self.health.loss_per_sec > 0 and min(self.timeToDieMax, self.health.current / self.health.loss_per_sec) or self.timeToDieMax
+	self.timeToDie = (
+		(self.dummy and 600) or
+		(self.health.loss_per_sec > 0 and min(self.timeToDieMax, self.health.current / self.health.loss_per_sec)) or
+		self.timeToDieMax
+	)
 end
 
 function Target:Update()
@@ -1579,6 +1591,7 @@ function Target:Update()
 		self.guid = nil
 		self.uid = nil
 		self.boss = false
+		self.dummy = false
 		self.stunnable = true
 		self.classification = 'normal'
 		self.player = false
@@ -1597,10 +1610,11 @@ function Target:Update()
 	end
 	if guid ~= self.guid then
 		self.guid = guid
-		self.uid = tonumber(guid:match('^%w+-%d+-%d+-%d+-%d+-(%d+)') or 0)
+		self.uid = ToUID(guid) or 0
 		self:UpdateHealth(true)
 	end
 	self.boss = false
+	self.dummy = false
 	self.stunnable = true
 	self.classification = UnitClassification('target')
 	self.player = UnitIsPlayer('target')
@@ -1615,6 +1629,7 @@ function Target:Update()
 	end
 	if self.Dummies[self.uid] then
 		self.boss = true
+		self.dummy = true
 	end
 	if self.hostile or Opt.always_on then
 		UI:UpdateCombat()
@@ -1760,8 +1775,8 @@ APL[SPEC.HOLY].Main = function(self)
 	if Opt.auras and not Player.aura then
 		if DevotionAura:Usable() and DevotionAura:Down() then
 			UseExtra(DevotionAura)
-		elseif RetributionAura:Usable() and RetributionAura:Down() then
-			UseExtra(RetributionAura)
+		elseif ConcentrationAura:Usable() and ConcentrationAura:Down() then
+			UseExtra(ConcentrationAura)
 		elseif CrusaderAura:Usable() and CrusaderAura:Down() then
 			UseExtra(CrusaderAura)
 		end
@@ -1793,8 +1808,8 @@ APL[SPEC.PROTECTION].Main = function(self)
 	if Opt.auras and not Player.aura then
 		if DevotionAura:Usable() and DevotionAura:Down() then
 			UseExtra(DevotionAura)
-		elseif RetributionAura:Usable() and RetributionAura:Down() then
-			UseExtra(RetributionAura)
+		elseif ConcentrationAura:Usable() and ConcentrationAura:Down() then
+			UseExtra(ConcentrationAura)
 		elseif CrusaderAura:Usable() and CrusaderAura:Down() then
 			UseExtra(CrusaderAura)
 		end
@@ -1828,10 +1843,10 @@ APL[SPEC.RETRIBUTION].Main = function(self)
 		end
 	end
 	if Opt.auras and not Player.aura then
-		if RetributionAura:Usable() and RetributionAura:Down() then
-			UseExtra(RetributionAura)
-		elseif DevotionAura:Usable() and DevotionAura:Down() then
+		if DevotionAura:Usable() and DevotionAura:Down() then
 			UseExtra(DevotionAura)
+		elseif ConcentrationAura:Usable() and ConcentrationAura:Down() then
+			UseExtra(ConcentrationAura)
 		elseif CrusaderAura:Usable() and CrusaderAura:Down() then
 			UseExtra(CrusaderAura)
 		end
@@ -2552,6 +2567,10 @@ CombatEvent.TRIGGER = function(timeStamp, event, _, srcGUID, _, _, _, dstGUID, _
 end
 
 CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
+	local uid = ToUID(dstGUID)
+	if not uid or Target.Dummies[uid] then
+		return
+	end
 	trackAuras:Remove(dstGUID)
 	if Opt.auto_aoe then
 		AutoAoe:Remove(dstGUID)
@@ -2713,8 +2732,8 @@ function Events:UPDATE_SHAPESHIFT_FORM()
 		Player.aura = CrusaderAura
 	elseif DevotionAura:Up() then
 		Player.aura = DevotionAura
-	elseif RetributionAura:Up() then
-		Player.aura = RetributionAura
+	elseif ConcentrationAura:Up() then
+		Player.aura = ConcentrationAura
 	else
 		Player.aura = nil
 	end
