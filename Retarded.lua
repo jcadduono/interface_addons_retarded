@@ -267,6 +267,7 @@ local Player = {
 		t30 = 0, -- Heartfire Sentinel's Authority
 		t31 = 0, -- Zealous Pyreknight's Ardor
 		t32 = 0, -- Heartfire Sentinel's Authority (Awakened)
+		t33 = 0, -- Entombed Seraph's Radiance
 	},
 	previous_gcd = {},-- list of previous GCD abilities
 	item_use_blacklist = { -- list of item IDs with on-use effects we should mark unusable
@@ -717,10 +718,10 @@ function Ability:FullRechargeTime()
 		end
 		charges = charges - 1
 	end
-	if charges >= max_charges then
+	if charges >= info.maxCharges then
 		return 0
 	end
-	return (max_charges - charges - 1) * info.cooldownDuration + (recharge_time - (Player.ctime - info.cooldownStartTime) - (self.off_gcd and 0 or Player.execute_remains))
+	return (info.maxCharges - charges - 1) * info.cooldownDuration + (info.cooldownDuration - (Player.ctime - info.cooldownStartTime) - (self.off_gcd and 0 or Player.execute_remains))
 end
 
 function Ability:Duration()
@@ -1509,7 +1510,7 @@ end
 
 function Player:Update()
 	local _, cooldown, start, ends, spellId, speed, max_speed, speed_mh, speed_oh
-	self.main =  nil
+	self.main = nil
 	self.cd = nil
 	self.interrupt = nil
 	self.extra = nil
@@ -2842,6 +2843,7 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 	Player.set_bonus.t30 = (Player:Equipped(202450) and 1 or 0) + (Player:Equipped(202451) and 1 or 0) + (Player:Equipped(202452) and 1 or 0) + (Player:Equipped(202453) and 1 or 0) + (Player:Equipped(202455) and 1 or 0)
 	Player.set_bonus.t31 = (Player:Equipped(207189) and 1 or 0) + (Player:Equipped(207190) and 1 or 0) + (Player:Equipped(207191) and 1 or 0) + (Player:Equipped(207192) and 1 or 0) + (Player:Equipped(207194) and 1 or 0)
 	Player.set_bonus.t32 = (Player:Equipped(217196) and 1 or 0) + (Player:Equipped(217197) and 1 or 0) + (Player:Equipped(217198) and 1 or 0) + (Player:Equipped(217199) and 1 or 0) + (Player:Equipped(217200) and 1 or 0)
+	Player.set_bonus.t33 = (Player:Equipped(211991) and 1 or 0) + (Player:Equipped(211992) and 1 or 0) + (Player:Equipped(211993) and 1 or 0) + (Player:Equipped(211994) and 1 or 0) + (Player:Equipped(211996) and 1 or 0)
 
 	Player:ResetSwing(true, true)
 	Player:UpdateKnown()
@@ -3237,7 +3239,7 @@ SlashCmdList[ADDON] = function(msg, editbox)
 		UI:Reset()
 		return Status('Position has been reset to', 'default')
 	end
-	print(ADDON, '(version: |cFFFFD000' .. GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
+	print(ADDON, '(version: |cFFFFD000' .. C_AddOns.GetAddOnMetadata(ADDON, 'Version') .. '|r) - Commands:')
 	for _, cmd in next, {
 		'locked |cFF00C000on|r/|cFFC00000off|r - lock the ' .. ADDON .. ' UI so that it can\'t be moved',
 		'snap |cFF00C000above|r/|cFF00C000below|r/|cFFC00000off|r - snap the ' .. ADDON .. ' UI to the Personal Resource Display',
