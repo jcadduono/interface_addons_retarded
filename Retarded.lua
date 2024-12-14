@@ -161,7 +161,7 @@ local Abilities = {
 	bySpellId = {},
 	velocity = {},
 	autoAoe = {},
-	trackAuras = {},
+	tracked = {},
 }
 
 -- methods for target tracking / aoe modes
@@ -170,6 +170,9 @@ local AutoAoe = {
 	blacklist = {},
 	ignored_units = {},
 }
+
+-- methods for tracking ticking debuffs on targets
+local TrackedAuras = {}
 
 -- timers for updating combat/display/hp info
 local Timer = {
@@ -219,6 +222,7 @@ local Player = {
 		base = 0,
 		current = 0,
 		max = 100,
+		pct = 100,
 		regen = 0,
 	},
 	holy_power = {
@@ -263,10 +267,6 @@ local Player = {
 		last_taken = 0,
 	},
 	set_bonus = {
-		t29 = 0, -- Virtuous Silver Cataphract
-		t30 = 0, -- Heartfire Sentinel's Authority
-		t31 = 0, -- Zealous Pyreknight's Ardor
-		t32 = 0, -- Heartfire Sentinel's Authority (Awakened)
 		t33 = 0, -- Entombed Seraph's Radiance
 	},
 	previous_gcd = {},-- list of previous GCD abilities
@@ -282,20 +282,22 @@ local Player = {
 
 -- base mana pool max for each level
 Player.BaseMana = {
-	260,	270,	285,	300,	310,	--  5
-	330,	345,	360,	380,	400,	-- 10
-	430,	465,	505,	550,	595,	-- 15
-	645,	700,	760,	825,	890,	-- 20
-	965,	1050,	1135,	1230,	1335,	-- 25
-	1445,	1570,	1700,	1845,	2000,	-- 30
-	2165,	2345,	2545,	2755,	2990,	-- 35
-	3240,	3510,	3805,	4125,	4470,	-- 40
-	4845,	5250,	5690,	6170,	6685,	-- 45
-	7245,	7855,	8510,	9225,	10000,	-- 50
-	11745,	13795,	16205,	19035,	22360,	-- 55
-	26265,	30850,	36235,	42565,	50000,	-- 60
-	58730,	68985,	81030,	95180,	111800,	-- 65
-	131325,	154255,	181190,	212830,	250000,	-- 70
+	260,     270,     285,     300,     310,     -- 5
+	330,     345,     360,     380,     400,     -- 10
+	430,     465,     505,     550,     595,     -- 15
+	645,     700,     760,     825,     890,     -- 20
+	965,     1050,    1135,    1230,    1335,    -- 25
+	1445,    1570,    1700,    1845,    2000,    -- 30
+	2165,    2345,    2545,    2755,    2990,    -- 35
+	3240,    3510,    3805,    4125,    4470,    -- 40
+	4845,    5250,    5690,    6170,    6685,    -- 45
+	7245,    7855,    8510,    9225,    10000,   -- 50
+	11745,   13795,   16205,   19035,   22360,   -- 55
+	26265,   30850,   36235,   42565,   50000,   -- 60
+	58730,   68985,   81030,   95180,   111800,  -- 65
+	131325,  154255,  181190,  212830,  250000,  -- 70
+	293650,  344930,  405160,  475910,  559015,  -- 75
+	656630,  771290,  905970,  1064170, 2500000, -- 80
 }
 
 -- current target information
@@ -323,6 +325,14 @@ Target.Dummies = {
 	[194649] = true,
 	[197833] = true,
 	[198594] = true,
+	[219250] = true,
+	[225983] = true,
+	[225984] = true,
+	[225985] = true,
+	[225976] = true,
+	[225977] = true,
+	[225978] = true,
+	[225982] = true,
 }
 
 -- Start AoE
@@ -552,6 +562,10 @@ function Ability:Remains()
 	return 0
 end
 
+function Ability:React()
+	return self:Remains()
+end
+
 function Ability:Expiring(seconds)
 	local remains = self:Remains()
 	return remains > 0 and remains < (seconds or Player.gcd)
@@ -623,6 +637,48 @@ function Ability:Ticking()
 	return count
 end
 
+function Ability:HighestRemains()
+	local highest
+	if self.traveling then
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				highest = self:Duration()
+			end
+		end
+	end
+	if self.aura_targets then
+		local remains
+		for _, aura in next, self.aura_targets do
+			remains = max(0, aura.expires - Player.time - Player.execute_remains)
+			if remains > 0 and (not highest or remains > highest) then
+				highest = remains
+			end
+		end
+	end
+	return highest or 0
+end
+
+function Ability:LowestRemains()
+	local lowest
+	if self.traveling then
+		for _, cast in next, self.traveling do
+			if Player.time - cast.start < self.max_range / self.velocity then
+				lowest = self:Duration()
+			end
+		end
+	end
+	if self.aura_targets then
+		local remains
+		for _, aura in next, self.aura_targets do
+			remains = max(0, aura.expires - Player.time - Player.execute_remains)
+			if remains > 0 and (not lowest or remains < lowest) then
+				lowest = remains
+			end
+		end
+	end
+	return lowest or 0
+end
+
 function Ability:TickTime()
 	return self.hasted_ticks and (Player.haste_factor * self.tick_interval) or self.tick_interval
 end
@@ -671,12 +727,27 @@ function Ability:Stack()
 	return 0
 end
 
+function Ability:MaxStack()
+	return self.max_stack
+end
+
+function Ability:Capped(deficit)
+	return self:Stack() >= (self:MaxStack() - (deficit or 0))
+end
+
 function Ability:ManaCost()
 	return self.mana_cost > 0 and (self.mana_cost / 100 * Player.mana.base) or 0
 end
 
 function Ability:HolyPowerCost()
 	return self.holy_power_cost
+end
+
+function Ability:Free()
+	return (
+		(self.mana_cost > 0 and self:ManaCost() == 0) or
+		(self.holy_power_cost > 0 and self:HolyPowerCost() == 0)
+	)
 end
 
 function Ability:ChargesFractional()
@@ -739,6 +810,10 @@ end
 function Ability:CastTime()
 	local info = GetSpellInfo(self.spellId)
 	return info and info.castTime / 1000 or 0
+end
+
+function Ability:CastRegen()
+	return Player.mana.regen * self:CastTime() - self:ManaCost()
 end
 
 function Ability:Previous(n)
@@ -814,9 +889,6 @@ function Ability:CastSuccess(dstGUID)
 		Player.previous_gcd[10] = nil
 		table.insert(Player.previous_gcd, 1, self)
 	end
-	if self.aura_targets and self.requires_react then
-		self:RemoveAura(self.aura_target == 'player' and Player.guid or dstGUID)
-	end
 	if Opt.auto_aoe and self.auto_aoe and self.auto_aoe.trigger == 'SPELL_CAST_SUCCESS' then
 		AutoAoe:Add(dstGUID, true)
 	end
@@ -871,10 +943,8 @@ end
 
 -- Start DoT tracking
 
-local trackAuras = {}
-
-function trackAuras:Purge()
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Purge()
+	for _, ability in next, Abilities.tracked do
 		for guid, aura in next, ability.aura_targets do
 			if aura.expires <= Player.time then
 				ability:RemoveAura(guid)
@@ -883,13 +953,13 @@ function trackAuras:Purge()
 	end
 end
 
-function trackAuras:Remove(guid)
-	for _, ability in next, Abilities.trackAuras do
+function TrackedAuras:Remove(guid)
+	for _, ability in next, Abilities.tracked do
 		ability:RemoveAura(guid)
 	end
 end
 
-function Ability:TrackAuras()
+function Ability:Track()
 	self.aura_targets = {}
 end
 
@@ -1144,21 +1214,16 @@ WakeOfAshes.ignore_immune = true
 WakeOfAshes:AutoAoe()
 ------ Procs
 
+-- Hero talents
+
 -- Tier set bonuses
-local EchoesOfWrath = Ability:Add(423590, true, true) -- T31 4pc (Retribution)
-EchoesOfWrath.buff_duration = 12
-local WrathfulSanction = Ability:Add(424590, false, true) -- T31 2pc (Retribution)
+
 -- Racials
 
 -- PvP talents
 
 -- Trinket effects
-local MarkOfFyralath = Ability:Add(414532, false, true) -- DoT applied by Fyr'alath the Dreamrender
-MarkOfFyralath.buff_duration = 15
-MarkOfFyralath.tick_interval = 3
-MarkOfFyralath.hasted_ticks = true
-MarkOfFyralath.no_pandemic = true
-MarkOfFyralath:TrackAuras()
+
 -- Class cooldowns
 local PowerInfusion = Ability:Add(10060, true)
 PowerInfusion.buff_duration = 20
@@ -1235,9 +1300,6 @@ end
 -- Equipment
 local Trinket1 = InventoryItem:Add(0)
 local Trinket2 = InventoryItem:Add(0)
-local FyralathTheDreamrender = InventoryItem:Add(206448)
-FyralathTheDreamrender.cooldown_duration = 120
-FyralathTheDreamrender.off_gcd = false
 -- End Inventory Items
 
 -- Start Abilities Functions
@@ -1246,7 +1308,7 @@ function Abilities:Update()
 	wipe(self.bySpellId)
 	wipe(self.velocity)
 	wipe(self.autoAoe)
-	wipe(self.trackAuras)
+	wipe(self.tracked)
 	for _, ability in next, self.all do
 		if ability.known then
 			self.bySpellId[ability.spellId] = ability
@@ -1260,7 +1322,7 @@ function Abilities:Update()
 				self.autoAoe[#self.autoAoe + 1] = ability
 			end
 			if ability.aura_targets then
-				self.trackAuras[#self.trackAuras + 1] = ability
+				self.tracked[#self.tracked + 1] = ability
 			end
 		end
 	end
@@ -1269,6 +1331,14 @@ end
 -- End Abilities Functions
 
 -- Start Player Functions
+
+function Player:ManaTimeToMax()
+	local deficit = self.mana.max - self.mana.current
+	if deficit <= 0 then
+		return 0
+	end
+	return deficit / self.mana.regen
+end
 
 function Player:ResetSwing(mainHand, offHand, missed)
 	local mh, oh = UnitAttackSpeed('player')
@@ -1322,13 +1392,13 @@ function Player:BloodlustActive()
 end
 
 function Player:Dazed()
-	local _, i, id
+	local aura
 	for i = 1, 40 do
-		_, _, _, _, _, _, _, _, _, id = UnitAura('player', i, 'HARMFUL')
-		if not id then
+		aura = UnitAura('player', i, 'HARMFUL')
+		if not aurea then
 			return false
 		elseif (
-			id == 1604 -- Dazed (hit from behind)
+			aura.spellId == 1604 -- Dazed (hit from behind)
 		) then
 			return true
 		end
@@ -1435,11 +1505,6 @@ function Player:UpdateKnown()
 	else
 		Expurgation.auto_aoe = nil
 	end
-	if self.spec == SPEC.RETRIBUTION then
-		EchoesOfWrath.known = self.set_bonus.t31 >= 4 or self.set_bonus.t32 >= 4
-		WrathfulSanction.known = self.set_bonus.t31 >= 2 or self.set_bonus.t32 >= 2
-	end
-	MarkOfFyralath.known = FyralathTheDreamrender:Equipped()
 
 	Abilities:Update()
 
@@ -1539,7 +1604,7 @@ function Player:Update()
 	end
 	self.mana.regen = GetPowerRegenForPowerType(0)
 	self.mana.current = UnitPower('player', 0) + (self.mana.regen * self.execute_remains)
-	if self.cast.ability then
+	if self.cast.ability and self.cast.ability.mana_cost > 0 then
 		self.mana.current = self.mana.current - self.cast.ability:ManaCost()
 	end
 	self.mana.current = clamp(self.mana.current, 0, self.mana.max)
@@ -1559,7 +1624,7 @@ function Player:Update()
 	self.swing.oh.remains = max(0, self.swing.oh.last + self.swing.oh.speed - self.time)
 	self:UpdateThreat()
 
-	trackAuras:Purge()
+	TrackedAuras:Purge()
 	if Opt.auto_aoe then
 		for _, ability in next, Abilities.autoAoe do
 			ability:UpdateTargetsHit()
@@ -1614,7 +1679,7 @@ function Target:UpdateHealth(reset)
 		table.remove(self.health.history, 1)
 		self.health.history[25] = self.health.current
 	end
-	self.timeToDieMax = self.health.current / Player.health.max * 10
+	self.timeToDieMax = self.health.current / Player.health.max * (Player.spec == SPEC.RETRIBUTION and 15 or 25)
 	self.health.pct = self.health.max > 0 and (self.health.current / self.health.max * 100) or 100
 	self.health.loss_per_sec = (self.health.history[1] - self.health.current) / 5
 	self.timeToDie = (
@@ -1762,19 +1827,6 @@ function TemplarStrike:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 end
 
-function Judgment:Remains()
-	if Player.set_bonus.t30 >= 2 and HammerOfWrath:Traveling() > 0 then
-		return self:Duration()
-	end
-	return Ability.Remains(self)
-end
-
-function MarkOfFyralath:Refresh(guid)
-	if self.known and self.aura_targets[guid] then
-		self.aura_targets[guid].expires = Player.time + self.buff_duration
-	end
-end
-
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -1919,14 +1971,14 @@ actions.precombat+=/variable,name=trinket_priority,op=setif,value=2,value_else=1
 actions=auto_attack
 actions+=/rebuke
 actions+=/variable,name=dp_ending,value=talent.divine_purpose&buff.divine_purpose.up&buff.divine_purpose.remains<gcd*2
-actions+=/variable,name=finish_condition,value=holy_power=5|variable.dp_ending|buff.echoes_of_wrath.up&set_bonus.tier31_4pc&talent.crusading_strikes|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up&!set_bonus.tier31_2pc
+actions+=/variable,name=finish_condition,value=holy_power=5|variable.dp_ending|(debuff.judgment.up|holy_power=4)&buff.divine_resonance.up
 actions+=/variable,name=hold_boj,value=debuff.judgment.down&cooldown.judgment.remains<gcd&dot.expurgation.remains>gcd*2&holy_power>=3
 actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
 	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
-	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (EchoesOfWrath.known and CrusadingStrikes.known and EchoesOfWrath:Up()) or (not WrathfulSanction.known and DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4))
+	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4))
 	self.hold_boj = Judgment:Down() and Judgment:Ready(Player.gcd) and Expurgation:Remains() > (Player.gcd * 2) and Player.holy_power.current >= 3
 	self.hold_judgment = DivineResonance.known and DivineResonance:Up(true) and (DivineResonance:Remains(true) % 5) < (Player.gcd * 1.5)
 	if self.use_cds then
@@ -1947,16 +1999,12 @@ actions.cooldowns+=/use_item,slot=trinket2,if=(buff.avenging_wrath.up&cooldown.a
 actions.cooldowns+=/use_item,slot=trinket1,if=!variable.trinket_1_buffs&(trinket.2.cooldown.remains|!variable.trinket_2_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
 actions.cooldowns+=/use_item,slot=trinket2,if=!variable.trinket_2_buffs&(trinket.1.cooldown.remains|!variable.trinket_1_buffs|!buff.crusade.up&cooldown.crusade.remains>20|!buff.avenging_wrath.up&cooldown.avenging_wrath.remains>20)
 actions.cooldowns+=/use_item,name=shadowed_razing_annihilator,if=(trinket.2.cooldown.remains|!variable.trinket_2_buffs)&(trinket.2.cooldown.remains|!variable.trinket_2_buffs)
-actions.cooldowns+=/use_item,name=fyralath_the_dreamrender,if=dot.mark_of_fyralath.ticking&!buff.avenging_wrath.up&!buff.crusade.up
 actions.cooldowns+=/shield_of_vengeance,if=fight_remains>15&(!talent.execution_sentence|!debuff.execution_sentence.up)
 actions.cooldowns+=/execution_sentence,if=(!buff.crusade.up&cooldown.crusade.remains>15|buff.crusade.stack=10|cooldown.avenging_wrath.remains<0.75|cooldown.avenging_wrath.remains>15)&(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(target.time_to_die>8&!talent.executioners_will|target.time_to_die>12)
 actions.cooldowns+=/avenging_wrath,if=holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary&(cooldown.execution_sentence.remains=0|cooldown.final_reckoning.remains=0)
 actions.cooldowns+=/crusade,if=holy_power>=5|holy_power>=3&variable.finish_condition
 actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(buff.avenging_wrath.remains>8|buff.avenging_wrath.up&cooldown.avenging_wrath.remains<buff.avenging_wrath.remains|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
-	if FyralathTheDreamrender:Usable() and MarkOfFyralath:Ticking() >= Player.enemies and Player.major_cd_remains == 0 then
-		return UseCooldown(FyralathTheDreamrender)
-	end
 	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and (
 		Player.holy_power.current >= 5 or
 		(self.finish_condition and Player.holy_power.current >= 3) or
@@ -2073,9 +2121,6 @@ actions.generators+=/divine_hammer
 	) then
 		UseCooldown(WakeOfAshes)
 	end
-	if WrathfulSanction.known and BladeOfJustice:Usable() and Expurgation:Down() then
-		return BladeOfJustice
-	end
 	if self.use_cds and DivineToll:Usable() and Player.holy_power.current <= 2 and (
 		RadiantGlory.known or
 		(AvengingWrath.known and not AvengingWrath:Ready(15)) or
@@ -2083,9 +2128,6 @@ actions.generators+=/divine_hammer
 		Target.timeToDie < 8
 	) then
 		UseCooldown(DivineToll)
-	end
-	if WrathfulSanction.known and Judgment:Usable() and not self.hold_judgment and Expurgation:Up() and EchoesOfWrath:Down() then
-		return Judgment
 	end
 	if Crusade.known and Player.holy_power.current >= 3 and Crusade:Up() and Crusade:Stack() < 10 then
 		local apl = self:finishers()
@@ -2097,7 +2139,7 @@ actions.generators+=/divine_hammer
 	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) and (Player.enemies >= (CrusadingStrikes.known and 4 or 2)) then
 		return BladeOfJustice
 	end
-	if HammerOfWrath:Usable() and (Player.enemies < 2 or not BlessedChampion.known or Player.set_bonus.t30 >= 4) and (Player.holy_power.current <= 3 or Target.health.pct > 20 or not VanguardsMomentum.known) then
+	if HammerOfWrath:Usable() and (Player.enemies < 2 or not BlessedChampion.known) and (Player.holy_power.current <= 3 or Target.health.pct > 20 or not VanguardsMomentum.known) then
 		return HammerOfWrath
 	end
 	if TemplarSlash:Usable() and TemplarStrikes:Remains() < Player.gcd then
@@ -2428,7 +2470,7 @@ end
 
 function UI:UpdateDisplay()
 	Timer.display = 0
-	local border, dim, dim_cd, text_center, text_tr, text_cd
+	local border, dim, dim_cd, text_cd, text_center, text_tr
 	local channel = Player.channel
 
 	if Opt.dimmer then
@@ -2505,7 +2547,7 @@ function UI:UpdateCombat()
 
 	if Player.main then
 		retardedPanel.icon:SetTexture(Player.main.icon)
-		Player.main_freecast = (Player.main.mana_cost > 0 and Player.main:ManaCost() == 0) or (Player.main.holy_power_cost > 0 and Player.main:HolyPowerCost() == 0) or (Player.main.Free and Player.main:Free())
+		Player.main_freecast = Player.main:Free()
 	end
 	if Player.cd then
 		retardedCooldownPanel.icon:SetTexture(Player.cd.icon)
@@ -2613,7 +2655,7 @@ CombatEvent.UNIT_DIED = function(event, srcGUID, dstGUID)
 	if not uid or Target.Dummies[uid] then
 		return
 	end
-	trackAuras:Remove(dstGUID)
+	TrackedAuras:Remove(dstGUID)
 	if Opt.auto_aoe then
 		AutoAoe:Remove(dstGUID)
 	end
@@ -2625,7 +2667,6 @@ CombatEvent.SWING_DAMAGE = function(event, srcGUID, dstGUID, amount, overkill, s
 		if Opt.auto_aoe then
 			AutoAoe:Add(dstGUID, true)
 		end
-		MarkOfFyralath:Refresh(dstGUID)
 	elseif dstGUID == Player.guid then
 		Player.swing.last_taken = Player.time
 		if Opt.auto_aoe then
@@ -2655,7 +2696,7 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 
 	local ability = spellId and Abilities.bySpellId[spellId]
 	if not ability then
-		--log(format('EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
+		--log(format('%.3f EVENT %s TRACK CHECK FOR UNKNOWN %s ID %d', Player.time, event, type(spellName) == 'string' and spellName or 'Unknown', spellId or 0))
 		return
 	end
 
@@ -2686,9 +2727,6 @@ CombatEvent.SPELL = function(event, srcGUID, dstGUID, spellId, spellName, spellS
 	end
 	if event == 'SPELL_DAMAGE' or event == 'SPELL_ABSORBED' or event == 'SPELL_MISSED' or event == 'SPELL_AURA_APPLIED' or event == 'SPELL_AURA_REFRESH' then
 		ability:CastLanded(dstGUID, event, missType)
-		if MarkOfFyralath.known and event ~= 'SPELL_MISSED' then
-			MarkOfFyralath:Refresh(dstGUID)
-		end
 	end
 end
 
@@ -2839,10 +2877,6 @@ function Events:PLAYER_EQUIPMENT_CHANGED()
 		end
 	end
 
-	Player.set_bonus.t29 = (Player:Equipped(200414) and 1 or 0) + (Player:Equipped(200416) and 1 or 0) + (Player:Equipped(200417) and 1 or 0) + (Player:Equipped(200418) and 1 or 0) + (Player:Equipped(200419) and 1 or 0)
-	Player.set_bonus.t30 = (Player:Equipped(202450) and 1 or 0) + (Player:Equipped(202451) and 1 or 0) + (Player:Equipped(202452) and 1 or 0) + (Player:Equipped(202453) and 1 or 0) + (Player:Equipped(202455) and 1 or 0)
-	Player.set_bonus.t31 = (Player:Equipped(207189) and 1 or 0) + (Player:Equipped(207190) and 1 or 0) + (Player:Equipped(207191) and 1 or 0) + (Player:Equipped(207192) and 1 or 0) + (Player:Equipped(207194) and 1 or 0)
-	Player.set_bonus.t32 = (Player:Equipped(217196) and 1 or 0) + (Player:Equipped(217197) and 1 or 0) + (Player:Equipped(217198) and 1 or 0) + (Player:Equipped(217199) and 1 or 0) + (Player:Equipped(217200) and 1 or 0)
 	Player.set_bonus.t33 = (Player:Equipped(211991) and 1 or 0) + (Player:Equipped(211992) and 1 or 0) + (Player:Equipped(211993) and 1 or 0) + (Player:Equipped(211994) and 1 or 0) + (Player:Equipped(211996) and 1 or 0)
 
 	Player:ResetSwing(true, true)
