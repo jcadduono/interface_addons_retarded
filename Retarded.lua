@@ -1863,6 +1863,10 @@ function WakeOfAshes:Usable(...)
 	return not HammerOfLight:Available() and Ability.Usable(self, ...)
 end
 
+function EmpyreanLegacy:Cooldown()
+	return clamp(self.cooldown_duration - (Player.time - self.last_gained), 0, self.cooldown_duration)
+end
+
 -- End Ability Modifications
 
 local function UseCooldown(ability, overwrite)
@@ -2183,6 +2187,9 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() and Player.enemies >= 2 and TemplarStrikes:Remains() < Player.gcd then
 		return TemplarSlash
 	end
+	if Judgment:Usable() and not self.hold_judgment and DivineResonance:Down() and (Judgment:Down() or (EmpyreanLegacy.known and EmpyreanLegacy:Ready())) then
+		return Judgment
+	end
 	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) and (Player.enemies >= (CrusadingStrikes.known and 4 or 2)) then
 		return BladeOfJustice
 	end
@@ -2192,7 +2199,7 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() and TemplarStrikes:Remains() < Player.gcd then
 		return TemplarSlash
 	end
-	if Judgment:Usable() and not self.hold_judgment and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
+	if Judgment:Usable() and not self.hold_judgment and (not BoundlessJudgment.known or Player.holy_power.current <= 3 or Judgment:Stack() < 2) then
 		return Judgment
 	end
 	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) then
