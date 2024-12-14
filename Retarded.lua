@@ -1193,6 +1193,7 @@ local RadiantGlory = Ability:Add(458359, true, true)
 local ShieldOfVengeance = Ability:Add(184662, true, true)
 ShieldOfVengeance.buff_duration = 15
 ShieldOfVengeance.cooldown_duration = 90
+local TempestOfTheLightbringer = Ability:Add(383396, false, true, 337257)
 local TemplarsVerdict = Ability:Add(85256, false, true)
 TemplarsVerdict.holy_power_cost = 3
 local TemplarStrikes = Ability:Add(406646, false, true)
@@ -1215,7 +1216,15 @@ WakeOfAshes:AutoAoe()
 ------ Procs
 
 -- Hero talents
-
+---- Templar
+local LightsGuidance = Ability:Add(427445, false, true)
+local HammerOfLight = Ability:Add(427453, false, true, 429826)
+HammerOfLight.buff_duration = 1
+HammerOfLight.holy_power_cost = 5
+HammerOfLight:AutoAoe()
+HammerOfLight.buff = Ability:Add(427441, true, true)
+HammerOfLight.buff.buff_duration = 12
+HammerOfLight.buff.max_stack = 1
 -- Tier set bonuses
 
 -- Racials
@@ -1505,6 +1514,10 @@ function Player:UpdateKnown()
 	else
 		Expurgation.auto_aoe = nil
 	end
+	if LightsGuidance.known then
+		HammerOfLight.known = true
+		HammerOfLight.buff.known = true
+	end
 
 	Abilities:Update()
 
@@ -1779,13 +1792,13 @@ function DivineStorm:HolyPowerCost()
 	return Ability.HolyPowerCost(self)
 end
 
-function HammerOfJustice:Usable()
-	return Target.stunnable and Ability.Usable(self)
+function HammerOfJustice:Usable(...)
+	return Target.stunnable and Ability.Usable(self, ...)
 end
 Repentance.Usable = HammerOfJustice.Usable
 BlindingLight.Usable = HammerOfJustice.Usable
 
-function HammerOfWrath:Usable()
+function HammerOfWrath:Usable(...)
 	if not (
 		Target.health.pct < 20 or
 		(HammerOfWrath.rank_2.known and AvengingWrath:Up()) or
@@ -1793,14 +1806,14 @@ function HammerOfWrath:Usable()
 	) then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 
-function DivineShield:Usable()
+function DivineShield:Usable(...)
 	if Forbearance:Up() then
 		return false
 	end
-	return Ability.Usable(self)
+	return Ability.Usable(self, ...)
 end
 LayOnHands.Usable = DivineShield.Usable
 BlessingOfProtection.Usable = DivineShield.Usable
@@ -1809,8 +1822,8 @@ function TemplarSlash:Available()
 	return self.activation_time and (Player.time + Player.execute_remains - self.activation_time) < self.buff_duration
 end
 
-function TemplarSlash:Usable()
-	return self:Available() and Ability.Usable(self)
+function TemplarSlash:Usable(...)
+	return self:Available() and Ability.Usable(self, ...)
 end
 
 function TemplarSlash:CastSuccess(...)
@@ -1818,13 +1831,36 @@ function TemplarSlash:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 end
 
-function TemplarStrike:Usable()
-	return not TemplarSlash:Available() and Ability.Usable(self)
+function TemplarStrike:Usable(...)
+	return not TemplarSlash:Available() and Ability.Usable(self, ...)
 end
 
 function TemplarStrike:CastSuccess(...)
 	TemplarSlash.activation_time = Player.time
 	Ability.CastSuccess(self, ...)
+end
+
+function HammerOfLight.buff:Remains()
+	if (Player.time - HammerOfLight.last_used) < 1 then
+		return 0
+	end
+	local info = GetSpellInfo(WakeOfAshes.spellId)
+	if info and info.iconID == HammerOfLight.icon then
+		return self.buff_duration
+	end
+	return 0
+end
+
+function HammerOfLight:Available()
+	return self.known and self.buff:Up()
+end
+
+function HammerOfLight:Usable(...)
+	return self:Available() and Ability.Usable(self, ...)
+end
+
+function WakeOfAshes:Usable(...)
+	return not HammerOfLight:Available() and Ability.Usable(self, ...)
 end
 
 -- End Ability Modifications
@@ -2006,11 +2042,12 @@ actions.cooldowns+=/crusade,if=holy_power>=5|holy_power>=3&variable.finish_condi
 actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(buff.avenging_wrath.remains>8|buff.avenging_wrath.up&cooldown.avenging_wrath.remains<buff.avenging_wrath.remains|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
 	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and (
-		Player.holy_power.current >= 5 or
-		(self.finish_condition and Player.holy_power.current >= 3) or
-		(DivineAuxiliary.known and Player.holy_power.current >= 2)
+		Player.holy_power.current >= (3 - ((DivineAuxiliary.known or RadiantGlory.known) and 1 or 0))
 	) and (
-		(RadiantGlory.known and WakeOfAshes:Ready(0.75)) or
+		(RadiantGlory.known and (
+			WakeOfAshes:Ready(0.75) or
+			(Player.holy_power.current >= 5 and WakeOfAshes:Ready(1.5))
+		)) or
 		not RadiantGlory.known and (
 			(AvengingWrath.known and (AvengingWrath:Ready(0.75) or not AvengingWrath:Ready(15) or AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
 			(Crusade.known and ((Crusade:Down() and not Crusade:Ready(10)) or Crusade:Stack() >= 10))
@@ -2032,12 +2069,13 @@ actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.fini
 		return UseCooldown(Crusade)
 	end
 	if FinalReckoning:Usable() and (
-		Player.holy_power.current >= 5 or
-		(self.finish_condition and Player.holy_power.current >= 3) or
-		(DivineAuxiliary.known and Player.holy_power.current >= 2)
+		Player.holy_power.current >= (3 - ((DivineAuxiliary.known or RadiantGlory.known) and 1 or 0))
 	) and (
 		((Target.boss or Player.enemies >= 3) and Target.timeToDie < 10) or
-		(RadiantGlory.known and WakeOfAshes:Ready(0.75)) or
+		(RadiantGlory.known and (
+			WakeOfAshes:Ready(0.75) or
+			(Player.holy_power.current >= 5 and WakeOfAshes:Ready(1.5))
+		)) or
 		not RadiantGlory.known and (
 			(AvengingWrath.known and (AvengingWrath:Remains() > 8 or (AvengingWrath:Up() and AvengingWrath:Ready(AvengingWrath:Remains())))) or
 			(Crusade.known and (Crusade:Stack() >= 10 or (not Crusade:Ready() and Crusade:Down())))
@@ -2049,19 +2087,30 @@ end
 
 APL[SPEC.RETRIBUTION].finishers = function(self)
 --[[
-actions.finishers=variable,name=ds_castable,value=(spell_targets.divine_storm>=3|spell_targets.divine_storm>=2&!talent.divine_arbiter|buff.empyrean_power.up)&!buff.empyrean_legacy.up&!(buff.divine_arbiter.up&buff.divine_arbiter.stack>24)
-actions.finishers+=/divine_storm,if=variable.ds_castable&(!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10)
-actions.finishers+=/justicars_vengeance,if=!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10
-actions.finishers+=/templars_verdict,if=!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10
+actions.finishers=variable,name=ds_castable,value=(spell_targets.divine_storm>=2|buff.empyrean_power.up|!talent.final_verdict&talent.tempest_of_the_lightbringer)&!buff.empyrean_legacy.up&!(buff.divine_arbiter.up&buff.divine_arbiter.stack>24)
+actions.finishers+=/hammer_of_light
+actions.finishers+=/divine_hammer,if=holy_power=5
+actions.finishers+=/divine_storm,if=variable.ds_castable&!buff.hammer_of_light_ready.up&(!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10|talent.radiant_glory)&(!buff.divine_hammer.up|cooldown.divine_hammer.remains>110&holy_power>=4)
+actions.finishers+=/justicars_vengeance,if=(!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10|talent.radiant_glory)&!buff.hammer_of_light_ready.up&(!buff.divine_hammer.up|cooldown.divine_hammer.remains>110&holy_power>=4)
+actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remains>gcd*3|buff.crusade.up&buff.crusade.stack<10|talent.radiant_glory)&!buff.hammer_of_light_ready.up&(!buff.divine_hammer.up|cooldown.divine_hammer.remains>110&holy_power>=4)
 ]]
+	if HammerOfLight:Usable() then
+		return HammerOfLight
+	end
+	if DivineHammer:Usable() and Player.holy_power.current >= 5 then
+		return DivineHammer
+	end
 	if (
 		not self.use_cds or
 		self.dp_ending or
 		Target.timeToDie < Player.gcd or
-		(not Crusade.known or not Crusade:Ready(Player.gcd * 3) or (Crusade:Up() and Crusade:Stack() < 10))
+		(
+			(RadiantGlory.known or not Crusade.known or not Crusade:Ready(Player.gcd * 3) or (Crusade:Up() and Crusade:Stack() < 10)) and
+			not HammerOfLight:Available() and (not DivineHammer.known or DivineHammer:Down() or (not DivineHammer:Ready(110) and Player.holy_power.current >= 4))
+		)
 	) then
 		if DivineStorm:Usable() and (
-			(Player.enemies >= (DivineArbiter.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up())) and
+			(Player.enemies >= (DivineArbiter.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() or (not FinalVerdict.known and TempestOfTheLightbringer.known))) and
 			(not EmpyreanLegacy.known or EmpyreanLegacy:Down()) and
 			(not DivineArbiter.known or DivineArbiter:Stack() <= 24)
 		) then
@@ -2083,13 +2132,11 @@ APL[SPEC.RETRIBUTION].generators = function(self)
 --[[
 actions.generators=call_action_list,name=finishers,if=variable.finish_condition
 actions.generators+=/wake_of_ashes,if=holy_power<=2&(cooldown.avenging_wrath.remains|cooldown.crusade.remains)&(!talent.execution_sentence|cooldown.execution_sentence.remains>4|target.time_to_die<8)&(!talent.final_reckoning|cooldown.final_reckoning.remains>4|target.time_to_die<8)&(!raid_event.adds.exists|raid_event.adds.in>20|raid_event.adds.up)
-actions.generators+=/blade_of_justice,if=!dot.expurgation.ticking&set_bonus.tier31_2pc
 actions.generators+=/divine_toll,if=holy_power<=2&!debuff.judgment.up&(!raid_event.adds.exists|raid_event.adds.in>30|raid_event.adds.up)&(cooldown.avenging_wrath.remains>15|cooldown.crusade.remains>15|fight_remains<8)
-actions.generators+=/judgment,if=dot.expurgation.ticking&!buff.echoes_of_wrath.up&set_bonus.tier31_2pc
 actions.generators+=/call_action_list,name=finishers,if=holy_power>=3&buff.crusade.up&buff.crusade.stack<10
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd&spell_targets.divine_storm>=2
 actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&(spell_targets.divine_storm>=2&!talent.crusading_strikes|spell_targets.divine_storm>=4)&!variable.hold_boj
-actions.generators+=/hammer_of_wrath,if=(spell_targets.divine_storm<2|!talent.blessed_champion|set_bonus.tier30_4pc)&(holy_power<=3|target.health.pct>20|!talent.vanguards_momentum)
+actions.generators+=/hammer_of_wrath,if=(spell_targets.divine_storm<2|!talent.blessed_champion)&(holy_power<=3|target.health.pct>20|!talent.vanguards_momentum)
 actions.generators+=/templar_slash,if=buff.templar_strikes.remains<gcd
 actions.generators+=/judgment,if=!debuff.judgment.up&(holy_power<=3|!talent.boundless_judgment)
 actions.generators+=/blade_of_justice,if=(holy_power<=3|!talent.holy_blade)&!variable.hold_boj
@@ -2111,7 +2158,7 @@ actions.generators+=/divine_hammer
 		local apl = self:finishers()
 		if apl then return apl end
 	end
-	if WakeOfAshes:Usable() and Player.holy_power.current <= 2 and (not ExecutionSentence.known or not ExecutionSentence:Ready(4) or Target.timeToDie < 8) and (not FinalReckoning.known or not FinalReckoning:Ready(4) or not self.use_cds) and (
+	if WakeOfAshes:Usable() and (not LightsGuidance.known or Player.holy_power.current >= 2) and (not ExecutionSentence.known or not ExecutionSentence:Ready(4) or Target.timeToDie < 8) and (not FinalReckoning.known or not FinalReckoning:Ready(4) or not self.use_cds) and (
 		not self.use_cds or
 		RadiantGlory.known or
 		Player.major_cd_remains > 0 or
@@ -2145,7 +2192,7 @@ actions.generators+=/divine_hammer
 	if TemplarSlash:Usable() and TemplarStrikes:Remains() < Player.gcd then
 		return TemplarSlash
 	end
-	if Judgment:Usable() and not self.hold_judgment and Judgment:Down() and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
+	if Judgment:Usable() and not self.hold_judgment and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
 		return Judgment
 	end
 	if BladeOfJustice:Usable() and not self.hold_boj and (Player.holy_power.current <= 3 or not HolyBlade.known) then
@@ -2170,9 +2217,6 @@ actions.generators+=/divine_hammer
 	if apl then return apl end
 	if TemplarSlash:Usable() then
 		return TemplarSlash
-	end
-	if Judgment:Usable() and not self.hold_judgment and (Player.holy_power.current <= 3 or not BoundlessJudgment.known) then
-		return Judgment
 	end
 	if TemplarStrike:Usable() then
 		return TemplarStrike
