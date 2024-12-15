@@ -2018,7 +2018,7 @@ actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
 	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
-	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4))
+	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) or (DivinePurpose.known and HammerOfLight:Available() and Judgment:Up() and DivinePurpose:Up())
 	self.hold_boj = Judgment:Down() and Judgment:Ready(Player.gcd) and Expurgation:Remains() > (Player.gcd * 2) and Player.holy_power.current >= 3
 	self.hold_judgment = DivineResonance.known and DivineResonance:Up(true) and (DivineResonance:Remains(true) % 5) < (Player.gcd * 1.5)
 	if self.use_cds then
