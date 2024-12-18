@@ -1142,7 +1142,7 @@ local BlessedChampion = Ability:Add(403010, false, true)
 BlessedChampion.talent_node = 81541
 local BoundlessJudgment = Ability:Add(405278, false, true)
 local ConsecratedBlade = Ability:Add(404834, false, true)
-local Crusade = Ability:Add(231895, true, true)
+local Crusade = Ability:Add(231895, true, true, 454373)
 Crusade.buff_duration = 27
 Crusade.cooldown_duration = 120
 Crusade.triggers_gcd = false
@@ -1801,7 +1801,7 @@ BlindingLight.Usable = HammerOfJustice.Usable
 function HammerOfWrath:Usable(...)
 	if not (
 		Target.health.pct < 20 or
-		(HammerOfWrath.rank_2.known and AvengingWrath:Up()) or
+		(HammerOfWrath.rank_2.known and Player.major_cd_remains > 0) or
 		(FinalVerdict.known and FinalVerdict:Up())
 	) then
 		return false
@@ -2017,8 +2017,20 @@ actions+=/call_action_list,name=cooldowns
 actions+=/call_action_list,name=generators
 ]]
 	self.use_cds = Target.boss or Target.player or Target.timeToDie > (Opt.cd_ttd - min(Player.enemies - 1, 6)) or (AvengingWrath.known and AvengingWrath:Remains() > 8) or (Crusade.known and Crusade:Remains() > 8)
-	self.dp_ending = DivinePurpose.known and DivinePurpose:Up() and DivinePurpose:Remains() < (Player.gcd * 2)
-	self.finish_condition = Player.holy_power.current >= 5 or self.dp_ending or Target.timeToDie < Player.gcd or (DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) or (DivinePurpose.known and HammerOfLight:Available() and Judgment:Up() and DivinePurpose:Up())
+	self.cd_ending = (
+		(DivinePurpose.known and between(DivinePurpose:Remains(), 0.1, Player.gcd * 2)) or
+		(ExecutionSentence.known and between(ExecutionSentence:Remains(), 0.1, Player.gcd * 2)) or
+		(FinalReckoning.known and between(FinalReckoning:Remains(), 0.1, Player.gcd * 2)) or
+		(Judgment:Up() and between(Player.major_cd_remains, 0.1, Player.gcd * 2))
+	)
+	self.finish_condition = (
+		Player.holy_power.current >= (5 - ((DivinePurpose.known and DivinePurpose:Up()) and 1 or 0)) or
+		self.cd_ending or
+		Target.timeToDie < Player.gcd or
+		(DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) or
+		(DivinePurpose.known and HammerOfLight:Available() and Judgment:Up() and DivinePurpose:Up()) or
+		(EmpyreanPower.known and Player.enemies >= 2 and EmpyreanPower:Up() and Judgment:Up() and Player.major_cd_remains > 0)
+	)
 	self.hold_boj = Judgment:Down() and Judgment:Ready(Player.gcd) and Expurgation:Remains() > (Player.gcd * 2) and Player.holy_power.current >= 3
 	self.hold_judgment = DivineResonance.known and DivineResonance:Up(true) and (DivineResonance:Remains(true) % 5) < (Player.gcd * 1.5)
 	if self.use_cds then
@@ -2104,20 +2116,24 @@ actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remain
 	if DivineHammer:Usable() and Player.holy_power.current >= 5 then
 		return DivineHammer
 	end
+	self.ds_castable = (
+		(Player.enemies >= 2 or ((EmpyreanPower.known and EmpyreanPower:Up()) or (not FinalVerdict.known and TempestOfTheLightbringer.known))) and
+		(not EmpyreanLegacy.known or EmpyreanLegacy:Down()) and
+		(not DivineArbiter.known or DivineArbiter:Stack() <= 24)
+	)
+	if self.ds_castable and EmpyreanPower.known and DivineStorm:Usable() and EmpyreanPower:Up() then
+		return DivineStorm
+	end
 	if (
 		not self.use_cds or
-		self.dp_ending or
+		self.cd_ending or
 		Target.timeToDie < Player.gcd or
 		(
 			(RadiantGlory.known or not Crusade.known or not Crusade:Ready(Player.gcd * 3) or (Crusade:Up() and Crusade:Stack() < 10)) and
 			not HammerOfLight:Available() and (not DivineHammer.known or DivineHammer:Down() or (not DivineHammer:Ready(110) and Player.holy_power.current >= 4))
 		)
 	) then
-		if DivineStorm:Usable() and (
-			(Player.enemies >= (DivineArbiter.known and 3 or 2) or (EmpyreanPower.known and EmpyreanPower:Up() or (not FinalVerdict.known and TempestOfTheLightbringer.known))) and
-			(not EmpyreanLegacy.known or EmpyreanLegacy:Down()) and
-			(not DivineArbiter.known or DivineArbiter:Stack() <= 24)
-		) then
+		if self.ds_castable and DivineStorm:Usable() then
 			return DivineStorm
 		end
 		if JusticarsVengeance:Usable() then
