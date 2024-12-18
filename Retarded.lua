@@ -1217,6 +1217,11 @@ WakeOfAshes:AutoAoe()
 
 -- Hero talents
 ---- Templar
+local LightsDeliverance = Ability:Add(425518, true, true, 433732)
+LightsDeliverance.buff_duration = 12
+LightsDeliverance.building = Ability:Add(433674, true, true)
+LightsDeliverance.building.buff_duration = 3600
+LightsDeliverance.building.max_stack = 60
 local LightsGuidance = Ability:Add(427445, false, true)
 local HammerOfLight = Ability:Add(427453, false, true, 429826)
 HammerOfLight.buff_duration = 1
@@ -1513,6 +1518,9 @@ function Player:UpdateKnown()
 		Expurgation:AutoAoe(true, 'apply')
 	else
 		Expurgation.auto_aoe = nil
+	end
+	if LightsDeliverance.known then
+		LightsDeliverance.building.known = true
 	end
 	if LightsGuidance.known then
 		HammerOfLight.known = true
@@ -1851,8 +1859,18 @@ function HammerOfLight.buff:Remains()
 	return 0
 end
 
+function HammerOfLight:HolyPowerCost()
+	if LightsDeliverance.known and LightsDeliverance:Up() then
+		return 0
+	end
+	return Ability.HolyPowerCost(self)
+end
+
 function HammerOfLight:Available()
-	return self.known and self.buff:Up()
+	return self.known and (
+		self.buff:Up() or
+		(LightsDeliverance.known and LightsDeliverance:Up())
+	)
 end
 
 function HammerOfLight:Usable(...)
