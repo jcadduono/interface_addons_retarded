@@ -1174,6 +1174,7 @@ EmpyreanPower.buff_duration = 15
 local ExecutionSentence = Ability:Add(343527, false, true)
 ExecutionSentence.buff_duration = 8
 ExecutionSentence.cooldown_duration = 30
+ExecutionSentence:Track()
 local ExecutionersWill = Ability:Add(406940, false, true)
 local Expurgation = Ability:Add(383344, false, true, 383346)
 Expurgation.buff_duration = 6
@@ -1219,17 +1220,20 @@ WakeOfAshes:AutoAoe()
 ---- Templar
 local LightsDeliverance = Ability:Add(425518, true, true, 433732)
 LightsDeliverance.buff_duration = 12
+LightsDeliverance:Track()
 LightsDeliverance.building = Ability:Add(433674, true, true)
 LightsDeliverance.building.buff_duration = 3600
 LightsDeliverance.building.max_stack = 60
 local LightsGuidance = Ability:Add(427445, false, true)
-local HammerOfLight = Ability:Add(427453, false, true, 429826)
+local HammerOfLight = Ability:Add(427453, true, true)
 HammerOfLight.buff_duration = 1
 HammerOfLight.holy_power_cost = 5
-HammerOfLight:AutoAoe()
+HammerOfLight.damage = Ability:Add(429826, false, true)
+HammerOfLight.damage:AutoAoe()
 HammerOfLight.buff = Ability:Add(427441, true, true)
 HammerOfLight.buff.buff_duration = 12
 HammerOfLight.buff.max_stack = 1
+HammerOfLight.buff.activation_time = 0
 -- Tier set bonuses
 
 -- Racials
@@ -1524,6 +1528,7 @@ function Player:UpdateKnown()
 	end
 	if LightsGuidance.known then
 		HammerOfLight.known = true
+		HammerOfLight.damage.known = true
 		HammerOfLight.buff.known = true
 	end
 
@@ -1826,6 +1831,10 @@ end
 LayOnHands.Usable = DivineShield.Usable
 BlessingOfProtection.Usable = DivineShield.Usable
 
+function ExecutionSentence:Duration()
+	return self.buff_duration + (ExecutionersWill.known and 4 or 0)
+end
+
 function TemplarSlash:Available()
 	return self.activation_time and (Player.time + Player.execute_remains - self.activation_time) < self.buff_duration
 end
@@ -1848,15 +1857,14 @@ function TemplarStrike:CastSuccess(...)
 	Ability.CastSuccess(self, ...)
 end
 
+function LightsDeliverance:Remains()
+	local aura = self.aura_targets[Player.guid]
+	return aura and max(0, aura.expires - Player.time - Player.execute_remains) or 0
+end
+
 function HammerOfLight.buff:Remains()
-	if (Player.time - HammerOfLight.last_used) < 1 then
-		return 0
-	end
-	local info = GetSpellInfo(WakeOfAshes.spellId)
-	if info and info.iconID == HammerOfLight.icon then
-		return self.buff_duration
-	end
-	return 0
+	local duration = self:Duration()
+	return max(0, (self.last_gained + duration) - Player.time - Player.execute_remains)
 end
 
 function HammerOfLight:HolyPowerCost()
@@ -1882,7 +1890,23 @@ function WakeOfAshes:Usable(...)
 end
 
 function EmpyreanLegacy:Cooldown()
-	return clamp(self.cooldown_duration - (Player.time - self.last_gained), 0, self.cooldown_duration)
+	local duration = self:CooldownDuration()
+	return max(0, (self.last_gained + duration) - Player.time - Player.execute_remains)
+end
+
+function WakeOfAshes:CastSuccess(...)
+	if LightsGuidance.known then
+		HammerOfLight.buff.last_gained = Player.time
+	end
+	if LightsDeliverance.known then
+		LightsDeliverance:RemoveAura(Player.guid)
+	end
+	Ability.CastSuccess(self, ...)
+end
+
+function HammerOfLight:CastSuccess(...)
+	self.buff.last_gained = 0
+	Ability.CastSuccess(self, ...)
 end
 
 -- End Ability Modifications
@@ -2046,13 +2070,15 @@ actions+=/call_action_list,name=generators
 		self.cd_ending or
 		Target.timeToDie < Player.gcd or
 		(DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) or
-		(DivinePurpose.known and HammerOfLight:Available() and Judgment:Up() and DivinePurpose:Up()) or
 		(EmpyreanPower.known and Player.enemies >= 2 and EmpyreanPower:Up() and Judgment:Up() and Player.major_cd_remains > 0)
 	)
 	self.hold_boj = Judgment:Down() and Judgment:Ready(Player.gcd) and Expurgation:Remains() > (Player.gcd * 2) and Player.holy_power.current >= 3
 	self.hold_judgment = DivineResonance.known and DivineResonance:Up(true) and (DivineResonance:Remains(true) % 5) < (Player.gcd * 1.5)
 	if self.use_cds then
 		self:cooldowns()
+	end
+	if HammerOfLight:Usable() and Judgment:Up() then
+		return HammerOfLight
 	end
 	return self:generators()
 end
@@ -2075,7 +2101,7 @@ actions.cooldowns+=/avenging_wrath,if=holy_power=5|holy_power>=3&variable.finish
 actions.cooldowns+=/crusade,if=holy_power>=5|holy_power>=3&variable.finish_condition
 actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.finish_condition|holy_power>=2&talent.divine_auxiliary)&(buff.avenging_wrath.remains>8|buff.avenging_wrath.up&cooldown.avenging_wrath.remains<buff.avenging_wrath.remains|cooldown.crusade.remains&(!buff.crusade.up|buff.crusade.stack>=10))&(!raid_event.adds.exists|raid_event.adds.up|raid_event.adds.in>40)
 ]]
-	if ExecutionSentence:Usable() and Target.timeToDie > (ExecutionersWill.known and 12 or 8) and (
+	if ExecutionSentence:Usable() and Target.timeToDie > ExecutionSentence:Duration() and (
 		Player.holy_power.current >= (3 - ((DivineAuxiliary.known or RadiantGlory.known) and 1 or 0))
 	) and (
 		(RadiantGlory.known and (
@@ -2192,6 +2218,9 @@ actions.generators+=/arcane_torrent
 actions.generators+=/consecration
 actions.generators+=/divine_hammer
 ]]
+	if RadiantGlory.known and ExecutionSentence.known and WakeOfAshes:Usable() and ExecutionSentence:Ticking() > 0 and Player.holy_power.current < 4 then
+		UseCooldown(WakeOfAshes)
+	end
 	if self.finish_condition then
 		local apl = self:finishers()
 		if apl then return apl end
