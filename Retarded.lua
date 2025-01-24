@@ -1015,7 +1015,7 @@ Note: To get talent_node value for a talent, hover over talent and use macro:
 -- Paladin Abilities
 ---- Class
 ------ Baseline
-local AvengingWrath = Ability:Add(31884, true, true)
+local AvengingWrath = Ability:Add(31884, true, true, 454351)
 AvengingWrath.buff_duration = 20
 AvengingWrath.cooldown_duration = 60
 AvengingWrath.triggers_gcd = false
