@@ -1181,12 +1181,15 @@ CrusaderStrike.requires_charge = true
 local DivineArbiter = Ability:Add(404306, true, true, 406975)
 DivineArbiter.buff_duration = 30
 local DivineAuxiliary = Ability:Add(406158, false, true)
-local DivineHammer = Ability:Add(198034, false, true, 198137)
-DivineHammer.buff_duration = 12
-DivineHammer.cooldown_duration = 20
-DivineHammer.tick_interval = 2
-DivineHammer.hasted_ticks = true
-DivineHammer:AutoAoe(true)
+local DivineHammer = Ability:Add(198034, true, true)
+DivineHammer.buff_duration = 10
+DivineHammer.cooldown_duration = 120
+DivineHammer.holy_power_cost = 3
+DivineHammer.dot = Ability:Add(198137, false, true)
+DivineHammer.dot.buff_duration = 10
+DivineHammer.dot.tick_interval = 2
+DivineHammer.dot.hasted_ticks = true
+DivineHammer.dot:AutoAoe()
 local DivineStorm = Ability:Add(53385, false, true)
 DivineStorm.holy_power_cost = 3
 DivineStorm:AutoAoe(true)
@@ -1670,12 +1673,13 @@ function Player:UpdateKnown()
 		end
 	end
 
-	if ConsecratedBlade.known or DivineHammer.known then
+	if ConsecratedBlade.known then
 		Consecration.known = false
 	end
 	if CrusadingStrikes.known or TemplarStrikes.known then
 		CrusaderStrike.known = false
 	end
+	DivineHammer.dot.known = DivineHammer.known
 	if FinalVerdict.known or JusticarsVengeance.known then
 		TemplarsVerdict.known = false
 	end
@@ -2335,8 +2339,8 @@ actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remain
 	if HammerOfLight:Usable() then
 		return HammerOfLight
 	end
-	if DivineHammer:Usable() and Player.holy_power.current >= 5 then
-		return DivineHammer
+	if self.use_cds and DivineHammer:Usable() and DivineHammer:Down() then
+		UseCooldown(DivineHammer)
 	end
 	self.ds_castable = (
 		(Player.enemies >= 2 or ((EmpyreanPower.known and EmpyreanPower:Up()) or (not FinalVerdict.known and TempestOfTheLightbringer.known))) and
@@ -2352,7 +2356,7 @@ actions.finishers+=/templars_verdict,if=(!talent.crusade|cooldown.crusade.remain
 		Target.timeToDie < Player.gcd or
 		(
 			(RadiantGlory.known or not Crusade.known or not Crusade:Ready(Player.gcd * 3) or (Crusade:Up() and Crusade:Stack() < 10)) and
-			not HammerOfLight:Available() and (not DivineHammer.known or DivineHammer:Down() or (not DivineHammer:Ready(110) and Player.holy_power.current >= 4))
+			not HammerOfLight:Available() and (not DivineHammer.known or not DivineHammer:Ready() or DivineHammer:Up())
 		)
 	) then
 		if self.ds_castable and DivineStorm:Usable() then
@@ -2450,13 +2454,8 @@ actions.generators+=/divine_hammer
 		local apl = self:finishers()
 		if apl then return apl end
 	end
-	if Player.enemies >= 2 then
-		if Consecration:Usable() and Consecration:Down() then
-			return Consecration
-		end
-		if DivineHammer:Usable() then
-			return DivineHammer
-		end
+	if Consecration:Usable() and Player.enemies >= 2 and Consecration:Down() then
+		return Consecration
 	end
 	if CrusaderStrike:Usable() and CrusaderStrike:ChargesFractional() >= 1.75 and (Player.holy_power.current <= 2 or (Player.holy_power.current <= 3 and not BladeOfJustice:Ready(Player.gcd * 2)) or (Player.holy_power.current <= 4 and not BladeOfJustice:Ready(Player.gcd * 2) and not Judgment:Ready(Player.gcd * 2))) then
 		return CrusaderStrike
@@ -2477,9 +2476,6 @@ actions.generators+=/divine_hammer
 	end
 	if Consecration:Usable() then
 		return Consecration
-	end
-	if DivineHammer:Usable() then
-		return DivineHammer
 	end
 end
 
