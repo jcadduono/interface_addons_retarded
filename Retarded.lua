@@ -554,6 +554,9 @@ function Ability:Usable(seconds, pool)
 	if not self.known then
 		return false
 	end
+	if self.Available and not self:Available(seconds) then
+		return false
+	end
 	if self:ManaCost() > Player.mana.current then
 		return false
 	end
@@ -1257,9 +1260,8 @@ HammerOfLight.holy_power_cost = 5
 HammerOfLight.damage = Ability:Add(429826, false, true)
 HammerOfLight.damage:AutoAoe()
 HammerOfLight.buff = Ability:Add(427441, true, true)
-HammerOfLight.buff.buff_duration = 12
-HammerOfLight.buff.max_stack = 1
-HammerOfLight.buff.activation_time = 0
+HammerOfLight.buff.buff_duration = 20
+HammerOfLight.buff.max_stack = 2
 -- Tier set bonuses
 
 -- Racials
@@ -1975,10 +1977,10 @@ function Ability:HolyPowerCost()
 	return self.holy_power_cost
 end
 
-function AvengingWrath:Usable(...)
-	return not RadiantGlory.known and Ability.Usable(self, ...)
+function AvengingWrath:Available(...)
+	return not RadiantGlory.known
 end
-Crusade.Usable = AvengingWrath.Usable
+Crusade.Available = AvengingWrath.Available
 
 function DivineStorm:HolyPowerCost()
 	if EmpyreanPower.known and EmpyreanPower:Up() then
@@ -1987,31 +1989,25 @@ function DivineStorm:HolyPowerCost()
 	return Ability.HolyPowerCost(self)
 end
 
-function HammerOfJustice:Usable(...)
-	return Target.stunnable and Ability.Usable(self, ...)
+function HammerOfJustice:Available(...)
+	return Target.stunnable
 end
-Repentance.Usable = HammerOfJustice.Usable
-BlindingLight.Usable = HammerOfJustice.Usable
+Repentance.Available = HammerOfJustice.Available
+BlindingLight.Available = HammerOfJustice.Available
 
-function HammerOfWrath:Usable(...)
-	if not (
+function HammerOfWrath:Available(...)
+	return (
 		Target.health.pct < 20 or
 		(HammerOfWrath.rank_2.known and Player.major_cd_remains > 0) or
 		(FinalVerdict.known and FinalVerdict:Up())
-	) then
-		return false
-	end
-	return Ability.Usable(self, ...)
+	)
 end
 
-function DivineShield:Usable(...)
-	if Forbearance:Up() then
-		return false
-	end
-	return Ability.Usable(self, ...)
+function DivineShield:Available(...)
+	return Forbearance:Down()
 end
-LayOnHands.Usable = DivineShield.Usable
-BlessingOfProtection.Usable = DivineShield.Usable
+LayOnHands.Available = DivineShield.Available
+BlessingOfProtection.Available = DivineShield.Available
 
 function ExecutionSentence:Duration()
 	return self.buff_duration + (ExecutionersWill.known and 4 or 0)
@@ -2021,17 +2017,13 @@ function TemplarSlash:Available()
 	return self.activation_time and (Player.time + Player.execute_remains - self.activation_time) < self.buff_duration
 end
 
-function TemplarSlash:Usable(...)
-	return self:Available() and Ability.Usable(self, ...)
-end
-
 function TemplarSlash:CastSuccess(...)
 	self.activation_time = nil
 	Ability.CastSuccess(self, ...)
 end
 
-function TemplarStrike:Usable(...)
-	return not TemplarSlash:Available() and Ability.Usable(self, ...)
+function TemplarStrike:Available(...)
+	return not TemplarSlash:Available()
 end
 
 function TemplarStrike:CastSuccess(...)
@@ -2042,11 +2034,6 @@ end
 function LightsDeliverance:Remains()
 	local aura = self.aura_targets[Player.guid]
 	return aura and max(0, aura.expires - Player.time - Player.execute_remains) or 0
-end
-
-function HammerOfLight.buff:Remains()
-	local duration = self:Duration()
-	return max(0, (self.last_gained + duration) - Player.time - Player.execute_remains)
 end
 
 function HammerOfLight:HolyPowerCost()
@@ -2063,12 +2050,8 @@ function HammerOfLight:Available()
 	)
 end
 
-function HammerOfLight:Usable(...)
-	return self:Available() and Ability.Usable(self, ...)
-end
-
-function WakeOfAshes:Usable(...)
-	return not HammerOfLight:Available() and Ability.Usable(self, ...)
+function WakeOfAshes:Available(...)
+	return not HammerOfLight:Available()
 end
 
 function EmpyreanLegacy:Cooldown()
@@ -2077,9 +2060,6 @@ function EmpyreanLegacy:Cooldown()
 end
 
 function WakeOfAshes:CastSuccess(...)
-	if LightsGuidance.known then
-		HammerOfLight.buff.last_gained = Player.time
-	end
 	if LightsDeliverance.known then
 		LightsDeliverance:RemoveAura(Player.guid)
 	end
@@ -2251,6 +2231,7 @@ actions+=/call_action_list,name=generators
 		Player.holy_power.current >= (5 - ((DivinePurpose.known and DivinePurpose:Up()) and 1 or 0)) or
 		self.cd_ending or
 		Target.timeToDie < Player.gcd or
+		(DivineHammer.known and DivineHammer:Up()) or
 		(DivineResonance:Up() and (Judgment:Up() or Player.holy_power.current >= 4)) or
 		(EmpyreanPower.known and Player.enemies >= 2 and EmpyreanPower:Up() and Judgment:Up() and Player.major_cd_remains > 0)
 	)
@@ -2313,7 +2294,7 @@ actions.cooldowns+=/final_reckoning,if=(holy_power=5|holy_power>=3&variable.fini
 	if FinalReckoning:Usable() and (
 		Player.holy_power.current >= (3 - ((DivineAuxiliary.known or RadiantGlory.known) and 1 or 0))
 	) and (
-		((Target.boss or Player.enemies >= 3) and Target.timeToDie < 10) or
+		(Target.boss and Target.timeToDie < 10) or
 		(RadiantGlory.known and (
 			WakeOfAshes:Ready(0.75) or
 			(Player.holy_power.current >= 5 and WakeOfAshes:Ready(1.5))
